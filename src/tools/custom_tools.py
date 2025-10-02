@@ -20,8 +20,6 @@ class CalculatorTool(BaseTool):
     def _run(self, expression: str) -> str:
         """执行计算"""
         try:
-            app_logger.info(f"执行计算: {expression}")
-            
             # 安全地执行数学表达式
             # 只允许数字、运算符和括号
             allowed_chars = set("0123456789+-*/().% ")
@@ -64,9 +62,7 @@ class TextProcessTool(BaseTool):
             
             operation, text = parts
             operation = operation.strip().lower()
-            
-            app_logger.info(f"执行文本处理: {operation}")
-            
+
             if operation == "uppercase":
                 return text.upper()
             elif operation == "lowercase":

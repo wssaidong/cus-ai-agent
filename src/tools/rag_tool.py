@@ -260,8 +260,6 @@ class RAGSearchTool(BaseTool):
     def _run(self, query: str) -> str:
         """执行知识库搜索"""
         try:
-            app_logger.info(f"知识库搜索: {query}")
-            
             # 搜索知识库
             results = self.knowledge_base.search_with_score(query, top_k=self.top_k)
             

@@ -96,8 +96,6 @@ def create_dynamic_agent_executor(
 
 def entry_node(state: AgentState) -> AgentState:
     """入口节点：初始化状态"""
-    app_logger.info("进入入口节点")
-    
     if not state.get("metadata"):
         state["metadata"] = {}
     
@@ -115,8 +113,6 @@ def entry_node(state: AgentState) -> AgentState:
 
 def llm_node(state: AgentState) -> AgentState:
     """LLM节点：调用大模型进行推理"""
-    app_logger.info("进入LLM节点")
-    
     try:
         # 获取最后一条消息
         messages = state.get("messages", [])
@@ -141,9 +137,7 @@ def llm_node(state: AgentState) -> AgentState:
         
         # 更新元数据
         state["metadata"]["llm_calls"] = state["metadata"].get("llm_calls", 0) + 1
-        
-        app_logger.info(f"LLM响应: {state['final_response'][:100]}...")
-        
+
     except Exception as e:
         app_logger.error(f"LLM节点执行失败: {str(e)}")
         state["final_response"] = f"处理失败: {str(e)}"
@@ -154,8 +148,6 @@ def llm_node(state: AgentState) -> AgentState:
 
 def output_node(state: AgentState) -> AgentState:
     """输出节点：格式化输出"""
-    app_logger.info("进入输出节点")
-    
     # 确保有最终响应
     if not state.get("final_response"):
         state["final_response"] = "抱歉，我无法生成响应。"

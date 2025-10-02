@@ -1,6 +1,19 @@
-# 智能体API服务
+# 智能体API服务 (cus-ai-agent)
 
-基于LangGraph构建的智能体系统，通过FastAPI暴露OpenAPI接口，实现智能体编排功能。
+<div align="center">
+
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+基于 LangGraph 构建的智能体系统，通过 FastAPI 暴露 OpenAPI 接口，实现智能体编排功能。
+
+[快速开始](docs/quickstart.md) • [文档](docs/README.md) • [API 参考](docs/api-reference.md) • [贡献指南](CONTRIBUTING.md)
+
+</div>
+
+---
 
 ## 功能特性
 
@@ -452,15 +465,46 @@ python run.py
 - [LangSmith 集成指南](docs/langsmith_integration.md)
 - [故障排查指南](docs/troubleshooting.md)
 
-## 许可证
+## 📄 许可证
 
-MIT License
+本项目采用 [MIT License](LICENSE) 开源许可证。
 
-## 贡献
+## 🤝 贡献
 
-欢迎提交Issue和Pull Request！
+我们欢迎所有形式的贡献！
 
-## 联系方式
+- 🐛 [报告 Bug](https://github.com/wssaidong/cus-ai-agent/issues/new)
+- 💡 [提出新功能](https://github.com/wssaidong/cus-ai-agent/issues/new)
+- 📖 改进文档
+- 🔧 提交代码
 
-如有问题，请提交Issue或联系维护者。
+请阅读 [贡献指南](CONTRIBUTING.md) 了解详情。
+
+## 📞 联系方式
+
+- GitHub Issues: [问题反馈](https://github.com/wssaidong/cus-ai-agent/issues)
+- 文档: [完整文档](docs/README.md)
+
+## ⭐ Star History
+
+如果这个项目对你有帮助，请给我们一个 Star！
+
+## 🙏 致谢
+
+感谢以下开源项目：
+
+- [LangGraph](https://github.com/langchain-ai/langgraph) - 智能体编排框架
+- [LangChain](https://github.com/langchain-ai/langchain) - LLM 应用开发框架
+- [FastAPI](https://github.com/tiangolo/fastapi) - 现代 Web 框架
+- [Milvus](https://github.com/milvus-io/milvus) - 向量数据库
+
+---
+
+<div align="center">
+
+Made with ❤️ by the cus-ai-agent team
+
+[⬆ 回到顶部](#智能体api服务-cus-ai-agent)
+
+</div>
 

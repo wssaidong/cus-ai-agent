@@ -25,8 +25,6 @@ class DatabaseQueryTool(BaseTool):
     def _run(self, query: str) -> str:
         """执行数据库查询"""
         try:
-            app_logger.info(f"执行数据库查询: {query}")
-            
             # 安全检查：只允许SELECT查询
             query_upper = query.strip().upper()
             if not query_upper.startswith("SELECT"):
@@ -71,8 +69,6 @@ class DatabaseInfoTool(BaseTool):
     def _run(self, table_name: str) -> str:
         """获取表信息"""
         try:
-            app_logger.info(f"获取表信息: {table_name}")
-            
             # TODO: 实现实际的表信息查询逻辑
             return f"表 {table_name} 的信息查询功能待实现"
             

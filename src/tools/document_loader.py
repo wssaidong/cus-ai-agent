@@ -74,8 +74,7 @@ class DocumentLoader:
                     'file_name': file_path.name,
                     'file_type': cls.SUPPORTED_EXTENSIONS[extension]
                 })
-            
-            app_logger.info(f"成功加载文件: {file_path}, 文档数: {len(documents)}")
+
             return documents
             
         except Exception as e:
@@ -126,11 +125,7 @@ class DocumentLoader:
                     except Exception as e:
                         app_logger.warning(f"跳过文件 {file_path}: {str(e)}")
                         continue
-            
-            app_logger.info(
-                f"成功加载目录: {directory_path}, "
-                f"总文档数: {len(all_documents)}"
-            )
+
             return all_documents
             
         except Exception as e:

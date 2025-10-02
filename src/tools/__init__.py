@@ -38,7 +38,6 @@ def get_available_tools() -> List[BaseTool]:
     # MCP工具（动态加载）
     if settings.enable_mcp_tools and settings.mcp_server_url:
         try:
-            app_logger.info(f"尝试连接 MCP 服务器: {settings.mcp_server_url}")
             from .mcp_client import create_mcp_tools_sync
 
             # 使用较短的超时时间避免启动卡住

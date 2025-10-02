@@ -35,8 +35,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     """
     try:
         start_time = time.time()
-        app_logger.info(f"收到聊天请求: {request.message[:50]}...")
-        
+
         # 生成会话ID
         session_id = request.session_id or str(uuid.uuid4())
         
@@ -70,8 +69,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 "tool_calls": len(result.get("intermediate_steps", [])),
             }
         )
-        
-        app_logger.info(f"聊天请求完成，耗时: {execution_time:.2f}秒")
+
         return response
         
     except Exception as e:
@@ -93,8 +91,7 @@ async def chat_stream(request: ChatRequest):
         """生成流式响应"""
         try:
             start_time = time.time()
-            app_logger.info(f"收到流式聊天请求: {request.message[:50]}...")
-            
+
             # 生成会话ID
             session_id = request.session_id or str(uuid.uuid4())
             
@@ -128,9 +125,7 @@ async def chat_stream(request: ChatRequest):
             
             # 发送完成事件
             yield f"data: {{'type': 'end', 'execution_time': {execution_time:.2f}}}\n\n"
-            
-            app_logger.info(f"流式聊天请求完成，耗时: {execution_time:.2f}秒")
-            
+
         except Exception as e:
             app_logger.error(f"流式聊天请求失败: {str(e)}")
             yield f"data: {{'type': 'error', 'message': '{str(e)}'}}\n\n"
@@ -210,8 +205,6 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
         start_time = time.time()
         request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
-        app_logger.info(f"收到Completions请求: {request_id}, 模型: {request.model}")
-
         # 创建动态智能体执行器（使用请求中的参数）
         agent_executor = create_dynamic_agent_executor(
             model=request.model,
@@ -238,7 +231,6 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
             input_text = "\n".join(system_messages) + "\n\n" + input_text
 
         # 调用智能体
-        app_logger.info(f"调用智能体: {request.model}")
         result = await agent_executor.ainvoke({"input": input_text})
 
         # 获取响应内容
@@ -273,9 +265,6 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
             )
         )
 
-        execution_time = time.time() - start_time
-        app_logger.info(f"Completions请求完成: {request_id}, 耗时: {execution_time:.2f}秒")
-
         return completion_response
 
     except Exception as e:
@@ -291,8 +280,6 @@ async def _chat_completions_stream(request: CompletionRequest):
         try:
             start_time = time.time()
             request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
-
-            app_logger.info(f"收到流式Completions请求: {request_id}, 模型: {request.model}")
 
             # 创建动态智能体执行器
             agent_executor = create_dynamic_agent_executor(
@@ -330,8 +317,6 @@ async def _chat_completions_stream(request: CompletionRequest):
             yield f"data: {start_chunk.model_dump_json()}\n\n"
 
             # 流式调用智能体
-            app_logger.info(f"流式调用智能体: {request.model}")
-
             # AgentExecutor 的 astream_events 支持流式输出
             full_response = ""
             async for event in agent_executor.astream_events(
@@ -373,9 +358,6 @@ async def _chat_completions_stream(request: CompletionRequest):
             )
             yield f"data: {end_chunk.model_dump_json()}\n\n"
             yield "data: [DONE]\n\n"
-
-            execution_time = time.time() - start_time
-            app_logger.info(f"流式Completions请求完成: {request_id}, 耗时: {execution_time:.2f}秒")
 
         except Exception as e:
             app_logger.error(f"流式Completions请求失败: {str(e)}")
