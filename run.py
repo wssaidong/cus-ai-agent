@@ -56,14 +56,26 @@ def main():
     print()
     
     try:
-        # 使用uvicorn启动
-        subprocess.run([
+        # 检查是否启用 reload 模式（默认不启用，避免多进程问题）
+        enable_reload = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
+
+        # 构建启动命令
+        cmd = [
             sys.executable, "-m", "uvicorn",
             "src.api.main:app",
             "--host", "0.0.0.0",
-            "--port", "8000",
-            "--reload"
-        ])
+            "--port", "8000"
+        ]
+
+        if enable_reload:
+            cmd.append("--reload")
+            print("⚠️  开发模式: 启用自动重载")
+        else:
+            print("ℹ️  生产模式: 禁用自动重载")
+            print("   如需启用自动重载，设置环境变量: UVICORN_RELOAD=true")
+
+        # 使用uvicorn启动
+        subprocess.run(cmd)
     except KeyboardInterrupt:
         print("\n\n服务已停止")
     except Exception as e:

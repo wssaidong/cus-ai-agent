@@ -47,10 +47,24 @@ class RAGKnowledgeBase:
         self.chunk_overlap = chunk_overlap
 
         # 初始化嵌入模型
+        # 优先使用 RAG 专用的 API 配置，如果没有则回退到全局配置
+        embedding_api_key = settings.rag_openai_api_key or settings.openai_api_key
+        embedding_api_base = settings.rag_openai_api_base or settings.openai_api_base
+
+        if not embedding_api_key:
+            raise ValueError(
+                "未配置 Embedding API Key。请设置 RAG_OPENAI_API_KEY 或 OPENAI_API_KEY"
+            )
+
+        app_logger.info(f"初始化 RAG Embedding 配置:")
+        app_logger.info(f"  - API Base: {embedding_api_base}")
+        app_logger.info(f"  - 模型: {embedding_model}")
+        app_logger.info(f"  - 使用独立配置: {'是' if settings.rag_openai_api_key else '否（使用全局配置）'}")
+
         self.embeddings = OpenAIEmbeddings(
             model=embedding_model,
-            openai_api_key=settings.openai_api_key,
-            openai_api_base=settings.openai_api_base
+            openai_api_key=embedding_api_key,
+            openai_api_base=embedding_api_base
         )
 
         # 连接到 Milvus

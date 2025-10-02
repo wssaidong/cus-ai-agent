@@ -28,12 +28,20 @@ class MCPClient:
     async def list_tools(self) -> List[Dict[str, Any]]:
         """
         获取 MCP 服务器提供的工具列表
-        
+
         Returns:
             工具列表
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # 使用较短的超时时间，避免启动卡住
+            timeout_config = httpx.Timeout(
+                connect=3.0,  # 连接超时 3 秒
+                read=self.timeout,  # 读取超时使用配置的值
+                write=5.0,  # 写入超时 5 秒
+                pool=5.0  # 连接池超时 5 秒
+            )
+
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 response = await client.post(
                     self.server_url,
                     json={
@@ -45,7 +53,7 @@ class MCPClient:
                 )
                 response.raise_for_status()
                 result = response.json()
-                
+
                 if "error" in result:
                     raise Exception(f"MCP错误: {result['error']}")
                 

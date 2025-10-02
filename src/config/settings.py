@@ -64,7 +64,13 @@ class Settings(BaseSettings):
     rag_milvus_host: str = Field(default="localhost", alias="RAG_MILVUS_HOST")
     rag_milvus_port: int = Field(default=19530, alias="RAG_MILVUS_PORT")
     rag_milvus_collection: str = Field(default="knowledge_base", alias="RAG_MILVUS_COLLECTION")
+
+    # RAG Embedding 独立配置（可选，如果不设置则使用全局 OPENAI_API_KEY）
+    rag_openai_api_key: Optional[str] = Field(default=None, alias="RAG_OPENAI_API_KEY")
+    rag_openai_api_base: Optional[str] = Field(default=None, alias="RAG_OPENAI_API_BASE")
     rag_embedding_model: str = Field(default="text-embedding-3-small", alias="RAG_EMBEDDING_MODEL")
+
+    # RAG 其他配置
     rag_chunk_size: int = Field(default=1000, alias="RAG_CHUNK_SIZE")
     rag_chunk_overlap: int = Field(default=200, alias="RAG_CHUNK_OVERLAP")
     rag_top_k: int = Field(default=5, alias="RAG_TOP_K")

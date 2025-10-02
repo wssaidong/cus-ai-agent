@@ -8,6 +8,7 @@
 - ✅ FastAPI提供RESTful API接口
 - ✅ 支持工具调用（计算器、文本处理、API调用等）
 - ✅ 支持RAG知识库（Milvus向量数据库）
+- ✅ **支持独立的 Embedding API 配置** - 对话和 RAG 可使用不同的 API
 - ✅ 支持数据库查询（可选）
 - ✅ 支持流式输出（SSE）
 - ✅ OpenAPI文档自动生成
@@ -86,6 +87,14 @@ cp .env.example .env
 
 编辑`.env`文件，配置必要的环境变量：
 
+#### 方式 1: 使用配置向导（推荐）
+
+```bash
+bash scripts/setup_rag_config.sh
+```
+
+#### 方式 2: 手动配置
+
 ```env
 # 必需配置
 OPENAI_API_KEY=your_openai_api_key_here
@@ -95,11 +104,28 @@ LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=your_langsmith_api_key_here
 LANGCHAIN_PROJECT=cus-ai-agent
 
+# RAG 知识库配置（可选）
+ENABLE_RAG_TOOL=true
+
+# 独立的 Embedding API 配置（推荐：对话用 DeepSeek，Embedding 用 OpenAI）
+# 如果不设置，将使用上面的 OPENAI_API_KEY
+RAG_OPENAI_API_KEY=your_openai_api_key_for_embedding
+RAG_OPENAI_API_BASE=https://api.openai.com/v1
+
 # 可选配置
 MODEL_NAME=gpt-4-turbo-preview
 TEMPERATURE=0.7
 API_PORT=8000
 ```
+
+**💡 成本优化建议**：
+- 对话使用 DeepSeek（$0.14/1M tokens）
+- Embedding 使用 OpenAI（$0.02/1M tokens）
+- 总成本节省约 99%
+
+详细配置说明请查看：
+- [RAG Embedding 配置指南](docs/rag_embedding_config.md)
+- [配置示例](docs/rag_config_examples.md)
 
 **获取 LangSmith API Key:**
 1. 访问 [LangSmith](https://smith.langchain.com/)
