@@ -58,6 +58,23 @@ class Settings(BaseSettings):
     max_iterations: int = Field(default=10, alias="MAX_ITERATIONS")
     timeout_seconds: int = Field(default=60, alias="TIMEOUT_SECONDS")
 
+    # RAG知识库配置
+    enable_rag_tool: bool = Field(default=False, alias="ENABLE_RAG_TOOL")
+    rag_vector_db_type: str = Field(default="milvus", alias="RAG_VECTOR_DB_TYPE")
+    rag_milvus_host: str = Field(default="localhost", alias="RAG_MILVUS_HOST")
+    rag_milvus_port: int = Field(default=19530, alias="RAG_MILVUS_PORT")
+    rag_milvus_collection: str = Field(default="knowledge_base", alias="RAG_MILVUS_COLLECTION")
+    rag_embedding_model: str = Field(default="text-embedding-3-small", alias="RAG_EMBEDDING_MODEL")
+    rag_chunk_size: int = Field(default=1000, alias="RAG_CHUNK_SIZE")
+    rag_chunk_overlap: int = Field(default=200, alias="RAG_CHUNK_OVERLAP")
+    rag_top_k: int = Field(default=5, alias="RAG_TOP_K")
+
+    # LangSmith 配置（可观测性和调试）
+    langchain_tracing_v2: bool = Field(default=False, alias="LANGCHAIN_TRACING_V2")
+    langchain_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGCHAIN_ENDPOINT")
+    langchain_api_key: Optional[str] = Field(default=None, alias="LANGCHAIN_API_KEY")
+    langchain_project: str = Field(default="cus-ai-agent", alias="LANGCHAIN_PROJECT")
+
 
 # 全局配置实例
 settings = Settings()

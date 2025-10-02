@@ -33,9 +33,12 @@ prompt = ChatPromptTemplate.from_messages([
 - text_process: 处理文本（大小写转换、反转、长度等）
 - api_call: 调用外部HTTP API
 - database_query: 查询数据库（如果启用）
+- knowledge_base_search: 从知识库中搜索相关信息（RAG工具）
 - api-info-by-code: 根据API编码查询API详细信息（MCP工具）
 
-请根据用户的问题，选择合适的工具来完成任务。如果不需要使用工具，直接回答即可。
+请根据用户的问题，选择合适的工具来完成任务。
+当用户询问文档、资料、知识点等信息时，优先使用 knowledge_base_search 工具。
+如果不需要使用工具，直接回答即可。
 """),
     MessagesPlaceholder(variable_name="chat_history", optional=True),
     ("human", "{input}"),

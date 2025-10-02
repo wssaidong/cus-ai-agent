@@ -25,6 +25,16 @@ def get_available_tools() -> List[BaseTool]:
     tools.append(CalculatorTool())
     tools.append(TextProcessTool())
 
+    # RAG知识库工具
+    if settings.enable_rag_tool:
+        try:
+            from .rag_tool import create_rag_search_tool
+            rag_tool = create_rag_search_tool()
+            tools.append(rag_tool)
+            app_logger.info("成功加载 RAG 知识库工具")
+        except Exception as e:
+            app_logger.error(f"加载 RAG 工具失败: {str(e)}")
+
     # MCP工具（动态加载）
     if settings.enable_mcp_tools and settings.mcp_server_url:
         try:

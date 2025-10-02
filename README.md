@@ -7,19 +7,23 @@
 - ✅ 基于LangGraph的智能体编排
 - ✅ FastAPI提供RESTful API接口
 - ✅ 支持工具调用（计算器、文本处理、API调用等）
+- ✅ 支持RAG知识库（Milvus向量数据库）
 - ✅ 支持数据库查询（可选）
 - ✅ 支持流式输出（SSE）
 - ✅ OpenAPI文档自动生成
 - ✅ 结构化日志记录
 - ✅ 配置化管理
+- ✅ **LangSmith 集成** - 完整的可观测性和调试能力
 
 ## 技术栈
 
 - **Python 3.10+**
 - **LangGraph**: 智能体编排框架
-- **LangChain**: LLM应用开发框架
+- **LangChain 0.3+**: LLM应用开发框架 (Pydantic v2 兼容)
+- **LangSmith**: 可观测性和调试平台
 - **FastAPI**: Web框架
 - **Uvicorn**: ASGI服务器
+- **Milvus**: 向量数据库
 - **OpenAI**: 大模型API
 
 ## 项目结构
@@ -86,11 +90,22 @@ cp .env.example .env
 # 必需配置
 OPENAI_API_KEY=your_openai_api_key_here
 
+# LangSmith 配置（可观测性和调试）
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT=cus-ai-agent
+
 # 可选配置
 MODEL_NAME=gpt-4-turbo-preview
 TEMPERATURE=0.7
 API_PORT=8000
 ```
+
+**获取 LangSmith API Key:**
+1. 访问 [LangSmith](https://smith.langchain.com/)
+2. 注册/登录账号
+3. 进入 Settings → API Keys
+4. 创建新的 API Key
 
 ### 4. 安装依赖
 
@@ -355,6 +370,61 @@ gunicorn src.api.main:app \
 ### 3. 如何启用流式输出？
 
 使用`/api/v1/chat/stream`接口，返回Server-Sent Events流。
+
+### 4. Pydantic v2 兼容性问题？
+
+如果遇到 Pydantic 相关错误,运行升级脚本:
+
+```bash
+python scripts/upgrade_langchain.py
+```
+
+详见 [故障排查指南](docs/troubleshooting.md)
+
+## LangSmith 集成
+
+### 功能特性
+
+- ✅ **自动追踪**: 自动追踪所有 LLM 调用和工具执行
+- ✅ **实时监控**: 实时查看性能指标和错误
+- ✅ **调用链路**: 完整的调用链路可视化
+- ✅ **性能分析**: Token 使用量、响应时间统计
+- ✅ **错误调试**: 详细的错误堆栈和上下文
+
+### 快速开始
+
+1. **配置环境变量**
+
+```bash
+# 在 .env 文件中
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT=cus-ai-agent
+```
+
+2. **启动服务**
+
+```bash
+python run.py
+```
+
+3. **查看追踪数据**
+
+访问 [LangSmith Dashboard](https://smith.langchain.com/) 查看实时追踪数据
+
+### 追踪内容
+
+- LLM 调用 (ChatOpenAI)
+- 工具执行 (Calculator, TextProcess, API Call, RAG)
+- 智能体决策 (LangGraph 节点)
+- 错误和异常
+- 性能指标 (响应时间、Token 使用量)
+
+### 相关文档
+
+- [LangSmith 快速开始](docs/langsmith_quickstart.md)
+- [LangSmith 集成指南](docs/langsmith_integration.md)
+- [故障排查指南](docs/troubleshooting.md)
 
 ## 许可证
 

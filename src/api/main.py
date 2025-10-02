@@ -7,13 +7,14 @@ from fastapi.responses import JSONResponse
 from src.config import settings
 from src.utils import app_logger
 from .routes import router
+from .knowledge_routes import router as knowledge_router
 
 
 # 创建FastAPI应用
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
-    description="基于LangGraph的智能体API服务",
+    description="基于LangGraph的智能体API服务，支持RAG知识库",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -30,6 +31,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(router)
+app.include_router(knowledge_router)
 
 
 @app.on_event("startup")

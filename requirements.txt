@@ -4,12 +4,13 @@ uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 
-# LangChain和LangGraph - 使用兼容版本
-langchain==0.1.4
-langchain-openai==0.0.5
-langchain-core==0.1.23
-langgraph==0.0.20
-langchain-community==0.0.16
+# LangChain和LangGraph - 使用兼容 Pydantic v2 的版本
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-core>=0.3.0
+langgraph>=0.2.0
+langchain-community>=0.3.0
+langsmith>=0.1.0
 
 # HTTP客户端
 httpx>=0.26.0
@@ -33,3 +34,11 @@ loguru>=0.7.0
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 
+# RAG 相关
+pymilvus>=2.3.0
+langchain-milvus>=0.2.0
+sentence-transformers>=2.3.0
+pypdf>=4.0.0
+python-docx>=1.1.0
+markdown>=3.5.0
+tiktoken>=0.5.0
