@@ -2,8 +2,13 @@
 配置管理模块
 """
 from typing import List, Optional
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict
+
+# 获取项目根目录
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -12,7 +17,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         protected_namespaces=('settings_',),
         extra='forbid',
-        env_file='.env',
+        env_file=str(ENV_FILE),  # 使用绝对路径,确保无论在哪个目录运行都能找到 .env 文件
         env_file_encoding='utf-8',
         case_sensitive=False
     )
@@ -29,17 +34,17 @@ class Settings(BaseSettings):
     model_name: str = Field(default="gpt-4-turbo-preview", alias="MODEL_NAME")
     temperature: float = Field(default=0.7, alias="TEMPERATURE")
     max_tokens: int = Field(default=2000, alias="MAX_TOKENS")
-    
+
     # 通义千问配置
     dashscope_api_key: Optional[str] = Field(default=None, alias="DASHSCOPE_API_KEY")
-    
+
     # 数据库配置
     database_url: Optional[str] = Field(default=None, alias="DATABASE_URL")
-    
+
     # 日志配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: str = Field(default="json", alias="LOG_FORMAT")
-    
+
     # 工具配置
     enable_database_tool: bool = Field(default=False, alias="ENABLE_DATABASE_TOOL")
     enable_api_tool: bool = Field(default=True, alias="ENABLE_API_TOOL")
@@ -53,7 +58,7 @@ class Settings(BaseSettings):
     cors_origins: List[str] = Field(default=["*"], alias="CORS_ORIGINS")
     api_key_enabled: bool = Field(default=False, alias="API_KEY_ENABLED")
     api_key: Optional[str] = Field(default=None, alias="API_KEY")
-    
+
     # 性能配置
     max_iterations: int = Field(default=10, alias="MAX_ITERATIONS")
     timeout_seconds: int = Field(default=60, alias="TIMEOUT_SECONDS")

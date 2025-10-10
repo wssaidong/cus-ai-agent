@@ -4,27 +4,27 @@ services:
   # ==========================================
   # 智能体 API 服务
   # ==========================================
-  agent-api:
-    build: .
-    container_name: cus-ai-agent
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-    restart: unless-stopped
-    depends_on:
-      - milvus-standalone
-    networks:
-      - agent-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+#  agent-api:
+#    build: .
+#    container_name: cus-ai-agent
+#    ports:
+#      - "8000:8000"
+#    env_file:
+#      - .env
+#    volumes:
+#      - ./logs:/app/logs
+#      - ./data:/app/data
+#    restart: unless-stopped
+#    depends_on:
+#      - milvus-standalone
+#    networks:
+#      - agent-network
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 40s
 
   # ==========================================
   # Milvus 向量数据库 - etcd (元数据存储)

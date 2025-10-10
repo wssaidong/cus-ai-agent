@@ -5,6 +5,24 @@
 import os
 import sys
 import subprocess
+from pathlib import Path
+
+# 确保在项目根目录
+PROJECT_ROOT = Path(__file__).parent
+os.chdir(PROJECT_ROOT)
+
+# 尝试加载 .env 文件 (如果 python-dotenv 已安装)
+try:
+    from dotenv import load_dotenv
+    env_file = PROJECT_ROOT / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=False)
+        print("✅ .env 文件已加载")
+except ImportError:
+    print("⚠️  python-dotenv 未安装，将使用 Pydantic Settings 加载 .env")
+    print("   建议安装: pip install python-dotenv")
+except Exception as e:
+    print(f"⚠️  加载 .env 文件时出错: {e}")
 
 
 def check_env_file():
@@ -36,25 +54,39 @@ def main():
     print("=" * 50)
     print("🚀 启动智能体API服务")
     print("=" * 50)
-    
+
     # 检查Python版本
     python_version = sys.version.split()[0]
     print(f"Python版本: {python_version}")
-    
+
     # 检查.env文件
     check_env_file()
-    
+
     # 创建日志目录
     create_logs_dir()
-    
+
+    # 从配置中读取端口和主机
+    try:
+        from src.config import settings
+        api_host = settings.api_host
+        api_port = settings.api_port
+        print(f"\n配置加载成功:")
+        print(f"  - 模型: {settings.model_name}")
+        print(f"  - API地址: {api_host}:{api_port}")
+        print(f"  - RAG工具: {'启用' if settings.enable_rag_tool else '禁用'}")
+    except Exception as e:
+        print(f"\n⚠️  配置加载失败，使用默认值: {e}")
+        api_host = "0.0.0.0"
+        api_port = 8000
+
     # 启动服务
     print("\n启动服务...")
-    print("API文档: http://localhost:8000/docs")
-    print("健康检查: http://localhost:8000/api/v1/health")
+    print(f"API文档: http://localhost:{api_port}/docs")
+    print(f"健康检查: http://localhost:{api_port}/api/v1/health")
     print("\n按Ctrl+C停止服务")
     print("=" * 50)
     print()
-    
+
     try:
         # 检查是否启用 reload 模式（默认不启用，避免多进程问题）
         enable_reload = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
@@ -63,8 +95,8 @@ def main():
         cmd = [
             sys.executable, "-m", "uvicorn",
             "src.api.main:app",
-            "--host", "0.0.0.0",
-            "--port", "8000"
+            "--host", api_host,
+            "--port", str(api_port)
         ]
 
         if enable_reload:
