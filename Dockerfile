@@ -78,6 +78,7 @@ FROM python:3.10-slim
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache \
     PATH="/usr/local/bin:$PATH"
 
 WORKDIR /app
@@ -96,6 +97,8 @@ COPY --from=builder /install /usr/local
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
     mkdir -p logs data && \
     chown -R appuser:appuser /app
+
+COPY --chown=appuser:appuser tiktoken_cache/cl100k_base.tiktoken /app/.tiktoken_cache/9b5ad71b2ce5302211f9c61530b329a4922fc6a4
 
 # 复制项目文件(放在最后,利用缓存)
 COPY --chown=appuser:appuser src/ ./src/
