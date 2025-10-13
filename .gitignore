@@ -90,3 +90,5 @@ dmypy.json
 .pyre/
 
 volumes/
+
+.langgraph_api

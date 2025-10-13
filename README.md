@@ -28,11 +28,13 @@
 - ✅ 结构化日志记录
 - ✅ 配置化管理
 - ✅ **LangSmith 集成** - 完整的可观测性和调试能力
+- ✅ **LangGraph Studio 支持** - 可视化调试和监控
 
 ## 技术栈
 
 - **Python 3.10+**
 - **LangGraph**: 智能体编排框架
+- **LangGraph Studio**: 可视化调试工具
 - **LangChain 0.3+**: LLM应用开发框架 (Pydantic v2 兼容)
 - **LangSmith**: 可观测性和调试平台
 - **FastAPI**: Web框架
@@ -464,6 +466,58 @@ python run.py
 - [LangSmith 快速开始](docs/langsmith_quickstart.md)
 - [LangSmith 集成指南](docs/langsmith_integration.md)
 - [故障排查指南](docs/troubleshooting.md)
+
+## LangGraph Studio 集成
+
+### 功能特性
+
+- ✅ **可视化 Graph**: 直观查看智能体执行流程
+- ✅ **交互式调试**: 实时测试和调试智能体
+- ✅ **状态检查**: 查看每个节点的状态变化
+- ✅ **性能监控**: 执行时间和 Token 使用统计
+- ✅ **状态回溯**: 检查历史执行状态
+
+### 快速开始
+
+1. **安装依赖**
+
+```bash
+pip install -r requirements.txt
+```
+
+2. **启动 Studio**
+
+```bash
+# 使用启动脚本 (推荐)
+chmod +x scripts/start_studio.sh
+./scripts/start_studio.sh
+
+# 或直接使用 CLI
+langgraph dev
+```
+
+**遇到端口冲突?** 使用自动修复脚本:
+```bash
+./scripts/fix_port_conflict.sh
+```
+
+3. **访问 Studio UI**
+
+浏览器自动打开或手动访问: http://localhost:8123
+
+### Studio 功能
+
+- **Graph 可视化**: 查看节点和边的关系
+- **交互测试**: 输入消息并查看执行过程
+- **状态追踪**: 查看每个节点的输入输出
+- **调试工具**: 断点、单步执行、状态回溯
+
+### 相关文档
+
+- [Studio 快速开始](docs/langgraph-studio-quickstart.md)
+- [Studio 架构设计](docs/langgraph-studio-architecture.md)
+- [完整集成方案](docs/solutions/langgraph-studio-integration.md)
+- [端口冲突解决方案](docs/solutions/langgraph-studio-port-conflict-solution.md) ⚡
 
 ## 📄 许可证
 

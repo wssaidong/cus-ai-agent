@@ -21,6 +21,9 @@ langchain-openai==0.2.5
 # LangGraph 工作流
 langgraph==0.2.45
 
+# LangGraph CLI (用于 Studio UI)
+langgraph-cli==0.1.55
+
 # LangSmith 追踪和监控
 langsmith==0.1.143
 

@@ -127,3 +127,5 @@ LICENSE
 .gitlab-ci.yml
 .travis.yml
 Jenkinsfile
+
+.langgraph_api
