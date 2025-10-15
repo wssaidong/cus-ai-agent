@@ -1,0 +1,200 @@
+# MCP 工具配置示例文件
+# 复制此文件为 mcp_tools.yaml 并根据实际情况修改
+
+# 全局配置
+global:
+  # 全局启用/禁用 MCP 工具
+  # 设置为 false 将禁用所有 MCP 工具，无论单个服务器的配置如何
+  enabled: true
+  
+  # 全局默认超时时间（秒）
+  # 当单个服务器未设置 timeout 时，使用此值
+  default_timeout: 30
+  
+  # 连接超时时间（秒）
+  # 避免连接失败时等待过久
+  connect_timeout: 3
+  
+  # 启动时最大等待时间（秒）
+  # 防止启动阶段因某个服务器响应慢而卡住
+  # 即使服务器配置了更长的 timeout，启动时也只等待这么久
+  startup_max_timeout: 5
+
+# MCP 服务器列表
+servers:
+  # ============================================
+  # 示例 1: 文件系统工具服务器
+  # ============================================
+  - name: filesystem
+    # 是否启用此服务器
+    enabled: false
+    
+    # 服务器地址（必须是完整的 URL）
+    url: http://localhost:3000
+    
+    # 此服务器的超时时间（可选）
+    # 不设置则使用全局 default_timeout
+    timeout: 30
+    
+    # 描述信息（可选，用于文档和日志）
+    description: |
+      文件系统操作工具服务器
+      提供文件读写、目录管理、文件搜索等功能
+    
+    # 标签（可选，用于分类和筛选）
+    tags:
+      - filesystem
+      - file
+      - io
+    
+    # 工具名称前缀（可选）
+    # 用于避免不同服务器的工具名称冲突
+    # 例如：read_file 会变成 fs_read_file
+    tool_prefix: fs_
+
+  # ============================================
+  # 示例 2: 数据库工具服务器
+  # ============================================
+  - name: database
+    enabled: false
+    url: http://localhost:3001
+    
+    # 数据库操作可能需要更长的超时时间
+    timeout: 60
+    
+    description: |
+      数据库操作工具服务器
+      提供 SQL 查询、数据导入导出、表结构查询等功能
+      支持 MySQL、PostgreSQL、SQLite 等数据库
+    
+    tags:
+      - database
+      - sql
+      - data
+    
+    tool_prefix: db_
+
+  # ============================================
+  # 示例 3: 网络工具服务器
+  # ============================================
+  - name: network
+    enabled: false
+    url: http://localhost:3002
+    timeout: 45
+    
+    description: |
+      网络工具服务器
+      提供 HTTP 请求、网页抓取、API 调用等功能
+    
+    tags:
+      - network
+      - http
+      - web
+      - api
+    
+    tool_prefix: net_
+
+  # ============================================
+  # 示例 4: AI 辅助工具服务器
+  # ============================================
+  - name: ai_tools
+    enabled: false
+    url: http://localhost:3003
+    
+    # AI 模型推理可能需要更长的超时时间
+    timeout: 120
+    
+    description: |
+      AI 辅助工具服务器
+      提供图像识别、文本分析、语音识别等 AI 功能
+    
+    tags:
+      - ai
+      - ml
+      - vision
+      - nlp
+    
+    tool_prefix: ai_
+
+  # ============================================
+  # 示例 5: 代码分析工具服务器
+  # ============================================
+  - name: code_analysis
+    enabled: false
+    url: http://localhost:3004
+    timeout: 60
+    
+    description: |
+      代码分析工具服务器
+      提供代码静态分析、代码格式化、依赖分析等功能
+    
+    tags:
+      - code
+      - analysis
+      - lint
+    
+    tool_prefix: code_
+
+  # ============================================
+  # 示例 6: 自定义工具服务器（不使用前缀）
+  # ============================================
+  - name: custom
+    enabled: false
+    url: http://localhost:3005
+    
+    description: |
+      自定义工具集合
+      如果确定不会有命名冲突，可以不设置 tool_prefix
+    
+    tags:
+      - custom
+    
+    # 不设置 tool_prefix，使用原始工具名称
+
+  # ============================================
+  # 示例 7: 远程服务器
+  # ============================================
+  - name: remote_tools
+    enabled: false
+    
+    # 可以使用远程服务器地址
+    url: https://mcp.example.com/api
+    
+    # 远程服务器可能需要更长的超时时间
+    timeout: 90
+    
+    description: 远程 MCP 工具服务器
+    
+    tags:
+      - remote
+    
+    tool_prefix: remote_
+
+# ============================================
+# 配置说明
+# ============================================
+# 
+# 1. 启用/禁用服务器：
+#    - 全局禁用：设置 global.enabled = false
+#    - 禁用单个服务器：设置服务器的 enabled = false
+#
+# 2. 超时时间优先级：
+#    服务器的 timeout > global.default_timeout > 代码默认值(30秒)
+#
+# 3. 工具前缀建议：
+#    - 有命名冲突风险时使用
+#    - 保持简短明确（如 fs_, db_, net_）
+#    - 统一使用下划线结尾
+#
+# 4. 标签用途：
+#    - 用于分类和筛选（当前版本暂未使用）
+#    - 预留功能，未来可能用于按标签启用/禁用工具
+#
+# 5. 最佳实践：
+#    - 开发环境：启用所有需要的工具
+#    - 生产环境：只启用必要的工具
+#    - 测试新服务器：先单独启用测试
+#    - 定期检查日志：及时发现问题
+#
+# ============================================
+

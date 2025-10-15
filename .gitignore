@@ -38,6 +38,9 @@ ENV/
 .env
 .env.local
 
+# MCP Tools Configuration
+config/mcp_tools.yaml
+
 # Logs
 logs/
 *.log

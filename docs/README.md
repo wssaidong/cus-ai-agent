@@ -21,6 +21,10 @@
 
 - [RAG 知识库集成](rag_milvus_integration.md) - 知识库使用指南
 - [LangSmith 集成](langsmith_integration.md) - 可观测性和调试
+- [MCP 工具集成方案](solutions/mcp-tools-integration.md) - MCP 工具完整集成指南
+- [MCP 工具修复总结](solutions/mcp-tools-fix-summary.md) - MCP 工具加载问题修复
+- [MCP 工具适配器](mcp_adapter_usage.md) - MCP 工具集成指南(旧版)
+- [MCP 迁移指南](mcp_migration_guide.md) - 从 mcp_client 迁移到 mcp_adapter
 - [工具开发](development-guide.md#添加新工具) - 自定义工具开发
 
 ### 部署运维
@@ -81,6 +85,10 @@
 |------|------|------|
 | [RAG 集成](rag_milvus_integration.md) | 知识库集成 | ⭐⭐ |
 | [LangSmith 集成](langsmith_integration.md) | 可观测性 | ⭐⭐ |
+| [MCP 工具集成](solutions/mcp-tools-integration.md) | MCP 工具完整方案 | ⭐⭐ |
+| [MCP 修复总结](solutions/mcp-tools-fix-summary.md) | 问题修复记录 | ⭐⭐ |
+| [MCP 适配器](mcp_adapter_usage.md) | MCP 工具集成(旧) | ⭐⭐ |
+| [MCP 迁移](mcp_migration_guide.md) | MCP 工具迁移 | ⭐⭐ |
 | [工具开发](development-guide.md#添加新工具) | 自定义工具 | ⭐⭐⭐ |
 
 ### 运维文档

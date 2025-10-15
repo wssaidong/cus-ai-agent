@@ -21,8 +21,8 @@ llm = ChatOpenAI(
     openai_api_base=settings.openai_api_base,
 )
 
-# 获取工具
-tools = get_available_tools()
+# 获取工具（包含 MCP 工具）
+tools = get_available_tools(include_mcp=True)
 
 # 创建提示模板
 prompt = ChatPromptTemplate.from_messages([
@@ -104,11 +104,14 @@ def create_dynamic_agent_executor(
         openai_api_base=settings.openai_api_base,
     )
 
+    # 获取最新的工具列表（包含 MCP 工具）
+    current_tools = get_available_tools(include_mcp=True)
+
     # 创建动态智能体
-    dynamic_agent = create_openai_tools_agent(dynamic_llm, tools, prompt)
+    dynamic_agent = create_openai_tools_agent(dynamic_llm, current_tools, prompt)
     dynamic_executor = AgentExecutor(
         agent=dynamic_agent,
-        tools=tools,
+        tools=current_tools,
         verbose=True,
         max_iterations=settings.max_iterations,
         handle_parsing_errors=True,

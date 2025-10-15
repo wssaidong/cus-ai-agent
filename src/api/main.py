@@ -42,6 +42,20 @@ async def startup_event():
     app_logger.info(f"API地址: http://{settings.api_host}:{settings.api_port}")
     app_logger.info(f"文档地址: http://{settings.api_host}:{settings.api_port}/docs")
     app_logger.info(f"模型: {settings.model_name}")
+
+    # 异步加载 MCP 工具
+    try:
+        from src.tools import load_mcp_tools_async
+        mcp_tools = await load_mcp_tools_async()
+        if mcp_tools:
+            app_logger.info(f"✓ 成功加载 {len(mcp_tools)} 个 MCP 工具")
+            for tool in mcp_tools:
+                app_logger.info(f"  - {tool.name}")
+        else:
+            app_logger.info("未加载 MCP 工具")
+    except Exception as e:
+        app_logger.error(f"加载 MCP 工具失败: {str(e)}")
+
     app_logger.info("=" * 50)
 
 
@@ -77,7 +91,7 @@ async def global_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "src.api.main:app",
         host=settings.api_host,

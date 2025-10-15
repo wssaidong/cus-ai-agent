@@ -8,15 +8,33 @@
 ## [Unreleased]
 
 ### 新增
+- **MCP (Model Context Protocol) 工具支持** - 使用 `langchain-mcp-adapters` 集成 MCP 工具
+  - 支持多个 MCP 服务器配置
+  - 支持 HTTP (streamable-http) 传输协议
+  - 通过 YAML 配置文件管理 MCP 服务器
+  - 自动处理 SSE (Server-Sent Events) 响应格式
 - 优化项目文档结构，符合开源项目规范
 - 添加 LICENSE 文件（MIT 许可证）
 - 添加 CONTRIBUTING.md 贡献指南
 - 添加 CODE_OF_CONDUCT.md 行为准则
 - 添加 CHANGELOG.md 变更日志
+- 添加 MCP 工具配置文档 (`docs/mcp_tools_configuration.md`)
+- 添加 MCP 工具架构设计文档 (`docs/solutions/mcp_tools_architecture.md`)
+- 添加 MCP 迁移指南 (`docs/mcp_migration_guide.md`)
 
 ### 优化
+- 使用官方 `langchain-mcp-adapters` 替代自定义 MCP 客户端实现
 - 清理无用日志输出，提升性能
 - 优化代码注释和文档字符串
+
+### 变更
+- **[重要]** 移除 `src/tools/mcp_client.py` 自定义实现
+- **[重要]** MCP 工具加载统一使用 `src/tools/mcp_adapter.py`
+- 新增依赖：`langchain-mcp-adapters>=0.1.11`
+- 更新项目结构文档，反映 MCP 工具的变更
+
+### 移除
+- `src/tools/mcp_client.py` - 已被 `mcp_adapter.py` 替代
 
 ## [1.0.0] - 2024-10-02
 

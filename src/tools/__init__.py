@@ -7,9 +7,42 @@ from .database import DatabaseQueryTool, DatabaseInfoTool
 from .api_caller import APICallTool
 from .custom_tools import CalculatorTool, TextProcessTool
 
+# 全局 MCP 工具缓存
+_mcp_tools_cache: List[BaseTool] = []
 
-def get_available_tools() -> List[BaseTool]:
-    """获取可用的工具列表"""
+
+async def load_mcp_tools_async() -> List[BaseTool]:
+    """异步加载 MCP 工具"""
+    global _mcp_tools_cache
+
+    if _mcp_tools_cache:
+        app_logger.info(f"使用缓存的 {len(_mcp_tools_cache)} 个 MCP 工具")
+        return _mcp_tools_cache
+
+    try:
+        from .mcp_adapter import create_mcp_tools_async
+
+        mcp_tools = await create_mcp_tools_async()
+
+        if mcp_tools:
+            _mcp_tools_cache = mcp_tools
+            app_logger.info(f"成功加载 {len(mcp_tools)} 个 MCP 工具")
+
+        return mcp_tools
+    except Exception as e:
+        app_logger.error(f"异步加载 MCP 工具失败: {str(e)}")
+        import traceback
+        app_logger.error(traceback.format_exc())
+        return []
+
+
+def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
+    """
+    获取可用的工具列表
+
+    Args:
+        include_mcp: 是否包含 MCP 工具（需要先异步加载）
+    """
     tools = []
 
     # 数据库工具
@@ -35,32 +68,17 @@ def get_available_tools() -> List[BaseTool]:
         except Exception as e:
             app_logger.error(f"加载 RAG 工具失败: {str(e)}")
 
-    # MCP工具（动态加载）
-    if settings.enable_mcp_tools and settings.mcp_server_url:
-        try:
-            from .mcp_client import create_mcp_tools_sync
-
-            # 使用较短的超时时间避免启动卡住
-            mcp_tools = create_mcp_tools_sync(
-                server_url=settings.mcp_server_url,
-                timeout=min(settings.mcp_timeout, 5)  # 限制最大超时时间为 5 秒
-            )
-
-            if mcp_tools:
-                tools.extend(mcp_tools)
-                app_logger.info(f"成功加载 {len(mcp_tools)} 个MCP工具")
-            else:
-                app_logger.warning("MCP 服务器未返回任何工具")
-
-        except Exception as e:
-            app_logger.error(f"加载MCP工具失败: {str(e)}")
-            app_logger.info("继续启动，但 MCP 工具不可用")
+    # MCP工具（从缓存中获取）
+    if include_mcp and _mcp_tools_cache:
+        tools.extend(_mcp_tools_cache)
+        app_logger.info(f"添加 {len(_mcp_tools_cache)} 个 MCP 工具到工具列表")
 
     return tools
 
 
 __all__ = [
     "get_available_tools",
+    "load_mcp_tools_async",
     "DatabaseQueryTool",
     "DatabaseInfoTool",
     "APICallTool",

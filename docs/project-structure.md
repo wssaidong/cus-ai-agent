@@ -48,7 +48,7 @@ cus-ai-agent/
 │   │   ├── api_caller.py      # API 调用工具
 │   │   ├── rag_tool.py        # RAG 工具
 │   │   ├── document_loader.py # 文档加载器
-│   │   └── mcp_client.py      # MCP 客户端
+│   │   └── mcp_adapter.py     # MCP 工具适配器（使用 langchain-mcp-adapters）
 │   ├── config/                # 配置
 │   │   ├── __init__.py
 │   │   └── settings.py        # 配置管理
@@ -176,7 +176,7 @@ FastAPI 应用和路由：
 | `api_caller.py` | HTTP API 调用工具 |
 | `rag_tool.py` | RAG 知识库工具 |
 | `document_loader.py` | 文档加载器 |
-| `mcp_client.py` | MCP 协议客户端 |
+| `mcp_adapter.py` | MCP 工具适配器（使用 langchain-mcp-adapters） |
 
 #### src/config/ - 配置
 

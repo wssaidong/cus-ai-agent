@@ -22,6 +22,7 @@
 - ✅ 支持工具调用（计算器、文本处理、API调用等）
 - ✅ 支持RAG知识库（Milvus向量数据库）
 - ✅ **支持独立的 Embedding API 配置** - 对话和 RAG 可使用不同的 API
+- ✅ **支持 MCP 工具** - 可配置多个 MCP 服务器，单独启用/禁用
 - ✅ 支持数据库查询（可选）
 - ✅ 支持流式输出（SSE）
 - ✅ OpenAPI文档自动生成
@@ -141,12 +142,39 @@ API_PORT=8000
 详细配置说明请查看：
 - [RAG Embedding 配置指南](docs/rag_embedding_config.md)
 - [配置示例](docs/rag_config_examples.md)
+- [MCP 工具配置指南](docs/mcp_tools_configuration.md)
 
 **获取 LangSmith API Key:**
 1. 访问 [LangSmith](https://smith.langchain.com/)
 2. 注册/登录账号
 3. 进入 Settings → API Keys
 4. 创建新的 API Key
+
+#### MCP 工具配置（可选）
+
+如果需要使用 MCP (Model Context Protocol) 工具：
+
+```bash
+# 复制配置示例
+cp config/mcp_tools.example.yaml config/mcp_tools.yaml
+
+# 编辑配置文件
+vim config/mcp_tools.yaml
+```
+
+配置示例：
+```yaml
+global:
+  enabled: true  # 启用 MCP 工具
+
+servers:
+  - name: filesystem
+    enabled: true
+    url: http://localhost:3000
+    tool_prefix: fs_
+```
+
+详细配置说明请查看：[MCP 工具集成方案](docs/solutions/mcp-tools-integration.md)
 
 ### 4. 安装依赖
 
@@ -174,6 +202,17 @@ pip install --upgrade pip
 # 安装依赖
 pip install -r requirements.txt
 ```
+
+#### 遇到依赖冲突?
+
+如果安装过程中遇到依赖冲突错误,可以使用修复脚本:
+
+```bash
+chmod +x scripts/fix_dependencies.sh
+./scripts/fix_dependencies.sh
+```
+
+详细说明请查看: [依赖冲突解决方案](docs/troubleshooting/dependency-conflicts.md)
 
 ### 5. 启动服务
 
