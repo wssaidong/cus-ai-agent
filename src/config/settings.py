@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     rag_milvus_host: str = Field(default="localhost", alias="RAG_MILVUS_HOST")
     rag_milvus_port: int = Field(default=19530, alias="RAG_MILVUS_PORT")
     rag_milvus_collection: str = Field(default="knowledge_base", alias="RAG_MILVUS_COLLECTION")
+    rag_milvus_user: str = Field(default="root", alias="RAG_MILVUS_USER")
+    rag_milvus_password: str = Field(default="Milvus", alias="RAG_MILVUS_PASSWORD")
 
     # RAG Embedding 独立配置（可选，如果不设置则使用全局 OPENAI_API_KEY）
     rag_openai_api_key: Optional[str] = Field(default=None, alias="RAG_OPENAI_API_KEY")

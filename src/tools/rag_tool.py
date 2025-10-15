@@ -26,7 +26,9 @@ class RAGKnowledgeBase:
         collection_name: str,
         embedding_model: str,
         chunk_size: int = 1000,
-        chunk_overlap: int = 200
+        chunk_overlap: int = 200,
+        milvus_user: Optional[str] = None,
+        milvus_password: Optional[str] = None
     ):
         """
         初始化 RAG 知识库
@@ -38,11 +40,15 @@ class RAGKnowledgeBase:
             embedding_model: 嵌入模型名称
             chunk_size: 文本分块大小
             chunk_overlap: 文本分块重叠大小
+            milvus_user: Milvus 用户名
+            milvus_password: Milvus 密码
         """
         self.milvus_host = milvus_host
         self.milvus_port = milvus_port
         self.collection_name = collection_name
         self.embedding_model = embedding_model
+        self.milvus_user = milvus_user
+        self.milvus_password = milvus_password
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
@@ -69,11 +75,20 @@ class RAGKnowledgeBase:
 
         # 连接到 Milvus
         try:
-            connections.connect(
-                alias="default",
-                host=milvus_host,
-                port=milvus_port
-            )
+            connect_args = {
+                "alias": "default",
+                "host": milvus_host,
+                "port": milvus_port
+            }
+            # 如果提供了用户名和密码,则添加到连接参数中
+            if milvus_user and milvus_password:
+                connect_args["user"] = milvus_user
+                connect_args["password"] = milvus_password
+                app_logger.info(f"使用认证连接到 Milvus: {milvus_host}:{milvus_port} (用户: {milvus_user})")
+            else:
+                app_logger.info(f"连接到 Milvus: {milvus_host}:{milvus_port} (无认证)")
+
+            connections.connect(**connect_args)
             app_logger.info(f"成功连接到 Milvus: {milvus_host}:{milvus_port}")
         except Exception as e:
             app_logger.error(f"连接 Milvus 失败: {str(e)}")
@@ -84,12 +99,17 @@ class RAGKnowledgeBase:
         milvus_uri = f"http://{milvus_host}:{milvus_port}"
         app_logger.info(f"初始化 Milvus vectorstore，URI: {milvus_uri}")
 
+        # 构建连接参数
+        vectorstore_connection_args = {"uri": milvus_uri}
+        # 如果提供了用户名和密码,则添加到连接参数中
+        if milvus_user and milvus_password:
+            vectorstore_connection_args["user"] = milvus_user
+            vectorstore_connection_args["password"] = milvus_password
+
         self.vectorstore = Milvus(
             embedding_function=self.embeddings,
             collection_name=collection_name,
-            connection_args={
-                "uri": milvus_uri,
-            },
+            connection_args=vectorstore_connection_args,
             auto_id=True
         )
 
@@ -361,7 +381,9 @@ def get_knowledge_base() -> RAGKnowledgeBase:
             collection_name=settings.rag_milvus_collection,
             embedding_model=settings.rag_embedding_model,
             chunk_size=settings.rag_chunk_size,
-            chunk_overlap=settings.rag_chunk_overlap
+            chunk_overlap=settings.rag_chunk_overlap,
+            milvus_user=settings.rag_milvus_user,
+            milvus_password=settings.rag_milvus_password
         )
 
     return _knowledge_base_instance
