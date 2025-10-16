@@ -1,7 +1,7 @@
 """
 智能体节点定义
 """
-from typing import Dict, Any, Optional, List
+from typing import Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -10,6 +10,7 @@ from src.config import settings
 from src.utils import app_logger
 from src.tools import get_available_tools
 from .state import AgentState
+from .decision_engine import get_decision_engine, DecisionType
 
 
 # 初始化默认LLM
@@ -28,6 +29,16 @@ tools = get_available_tools(include_mcp=True)
 prompt = ChatPromptTemplate.from_messages([
     SystemMessage(content="""你是一个智能助手，可以使用各种工具来帮助用户解决问题。
 
+【智能决策系统】
+系统已为您分析了用户的问题类型，并提供了推荐的工具和决策建议。
+请根据以下信息进行智能决策：
+
+【决策信息】（在输入中会包含）：
+- 问题类型：系统识别的问题类型
+- 推荐工具：最适合的工具列表
+- 置信度：系统对决策的置信度
+- 推理说明：为什么选择这些工具
+
 【重要原则】知识库优先策略：
 在回答任何问题之前，首先判断是否可以从知识库中获取信息。知识库包含了经过验证的准确信息，应该作为首选信息来源。
 
@@ -40,21 +51,23 @@ prompt = ChatPromptTemplate.from_messages([
 6. 任何可能在知识库中存在的信息查询
 
 【工具使用决策流程】：
-第一步：判断问题是否与知识、文档、信息查询相关
-  - 如果是 → 立即使用 knowledge_base_search 工具搜索知识库
-  - 如果否 → 继续下一步
+第一步：查看系统提供的决策信息
+  - 如果推荐使用 knowledge_base_search → 立即使用该工具
+  - 如果推荐使用其他工具 → 按推荐使用
 
-第二步：根据问题类型选择其他工具
-  - 数学计算 → 使用 calculator
-  - 文本处理 → 使用 text_process
-  - API调用 → 使用 api_call
-  - 数据库查询 → 使用 database_query
+第二步：根据工具返回结果判断
+  - 如果知识库有相关信息 → 基于知识库内容回答
+  - 如果知识库无相关信息 → 考虑使用其他工具或基于通用知识回答
 
-第三步：如果知识库没有找到相关信息，再考虑使用其他工具或基于通用知识回答
+第三步：多工具组合
+  - 如果问题复杂，可能需要多个工具配合
+  - 按推荐工具列表依次使用
 
 【可用工具列表】：
 - knowledge_base_search: 【优先使用】从知识库中搜索相关信息（RAG工具）
-
+- calculator: 执行数学计算
+- text_process: 处理文本（大小写转换、反转等）
+- api_call: 调用外部HTTP API
 
 【回答要求】：
 1. 优先基于知识库内容回答，确保信息准确性
@@ -62,6 +75,7 @@ prompt = ChatPromptTemplate.from_messages([
 3. 如果知识库中没有找到信息，明确告知用户
 4. 避免在有知识库信息的情况下使用通用知识回答
 5. 回答要完整、准确、有条理
+6. 在使用工具时，说明为什么选择该工具
 """),
     MessagesPlaceholder(variable_name="chat_history", optional=True),
     ("human", "{input}"),
@@ -118,6 +132,27 @@ def create_dynamic_agent_executor(
     )
 
     return dynamic_executor
+
+
+def _build_decision_hint(decision_result) -> str:
+    """
+    构建决策提示信息
+
+    Args:
+        decision_result: 决策结果对象
+
+    Returns:
+        格式化的决策提示字符串
+    """
+    hint = f"""【智能决策信息】
+问题类型: {decision_result.decision_type.value}
+置信度: {decision_result.confidence:.2%}
+推理: {decision_result.reasoning}
+推荐工具: {', '.join(decision_result.recommended_tools) if decision_result.recommended_tools else '无特定工具推荐'}
+是否搜索知识库: {'是' if decision_result.should_search_kb else '否'}
+
+请根据上述决策信息选择合适的工具来回答问题。"""
+    return hint
 
 
 def _check_knowledge_base_relevance(query: str) -> Optional[str]:
@@ -194,14 +229,21 @@ def llm_node(state: AgentState) -> AgentState:
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, 'content') else str(last_message)
 
-        # 知识库预检查
-        kb_hint = _check_knowledge_base_relevance(user_input)
+        # 使用决策引擎进行智能决策
+        decision_engine = get_decision_engine()
+        decision_result = decision_engine.decide(user_input)
 
-        # 如果预检查发现相关内容，将提示添加到输入中
-        enhanced_input = user_input
-        if kb_hint:
-            enhanced_input = f"{user_input}\n\n{kb_hint}"
-            app_logger.info("已添加知识库预检查提示到用户输入")
+        app_logger.info(
+            f"智能决策结果 - 类型: {decision_result.decision_type.value}, "
+            f"置信度: {decision_result.confidence:.2%}, "
+            f"推荐工具: {decision_result.recommended_tools}"
+        )
+
+        # 构建决策提示
+        decision_hint = _build_decision_hint(decision_result)
+
+        # 增强输入：添加决策信息
+        enhanced_input = f"{user_input}\n\n{decision_hint}"
 
         # 执行智能体
         result = agent_executor.invoke({
@@ -216,8 +258,10 @@ def llm_node(state: AgentState) -> AgentState:
 
         # 更新元数据
         state["metadata"]["llm_calls"] = state["metadata"].get("llm_calls", 0) + 1
-        if kb_hint:
-            state["metadata"]["kb_precheck_triggered"] = True
+        state["metadata"]["decision_type"] = decision_result.decision_type.value
+        state["metadata"]["decision_confidence"] = decision_result.confidence
+        state["metadata"]["recommended_tools"] = decision_result.recommended_tools
+        state["metadata"]["should_search_kb"] = decision_result.should_search_kb
 
     except Exception as e:
         app_logger.error(f"LLM节点执行失败: {str(e)}")
