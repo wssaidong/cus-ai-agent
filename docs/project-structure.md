@@ -44,7 +44,6 @@ cus-ai-agent/
 │   ├── tools/                 # 工具集
 │   │   ├── __init__.py        # 工具注册
 │   │   ├── custom_tools.py    # 自定义工具
-│   │   ├── database.py        # 数据库工具
 │   │   ├── api_caller.py      # API 调用工具
 │   │   ├── rag_tool.py        # RAG 工具
 │   │   ├── document_loader.py # 文档加载器
@@ -172,7 +171,6 @@ FastAPI 应用和路由：
 |------|------|
 | `__init__.py` | 工具注册和管理 |
 | `custom_tools.py` | 自定义工具（计算器、文本处理） |
-| `database.py` | 数据库查询工具 |
 | `api_caller.py` | HTTP API 调用工具 |
 | `rag_tool.py` | RAG 知识库工具 |
 | `document_loader.py` | 文档加载器 |

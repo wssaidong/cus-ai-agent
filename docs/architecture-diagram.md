@@ -170,7 +170,6 @@ graph LR
     B -->|计算器| C[CalculatorTool]
     B -->|文本处理| D[TextProcessTool]
     B -->|API 调用| E[APICallTool]
-    B -->|数据库| F[DatabaseTool]
     B -->|RAG 检索| G[RAGSearchTool]
     
     C --> H[执行计算]
@@ -291,7 +290,6 @@ graph TD
     D --> H[state.py]
     G --> I[tools/__init__.py]
     I --> J[custom_tools.py]
-    I --> K[database.py]
     I --> L[api_caller.py]
     I --> F
     F --> M[document_loader.py]

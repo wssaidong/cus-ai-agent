@@ -263,7 +263,6 @@ http://localhost:8000/docs
 ```bash
 # 在 .env 中
 ENABLE_API_TOOL=true
-ENABLE_DATABASE_TOOL=true
 ```
 
 2. 查看可用工具
@@ -279,34 +278,6 @@ print([tool.name for tool in tools])
 message = "请使用计算器工具计算 123 + 456"
 ```
 
-### 问题：数据库工具连接失败
-
-**症状**
-```
-OperationalError: could not connect to server
-```
-
-**解决方案**
-
-1. 检查数据库 URL
-```bash
-# 在 .env 中
-DATABASE_URL=postgresql://user:pass@localhost:5432/db
-```
-
-2. 测试连接
-```bash
-psql $DATABASE_URL
-```
-
-3. 检查数据库服务
-```bash
-# PostgreSQL
-sudo systemctl status postgresql
-
-# MySQL
-sudo systemctl status mysql
-```
 
 ## RAG 知识库问题
 

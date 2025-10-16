@@ -3,7 +3,6 @@ from typing import List
 from langchain.tools import BaseTool
 from src.config import settings
 from src.utils import app_logger
-from .database import DatabaseQueryTool, DatabaseInfoTool
 from .api_caller import APICallTool
 from .custom_tools import CalculatorTool, TextProcessTool
 
@@ -45,10 +44,6 @@ def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
     """
     tools = []
 
-    # 数据库工具
-    if settings.enable_database_tool and settings.database_url:
-        tools.append(DatabaseQueryTool(database_url=settings.database_url))
-        tools.append(DatabaseInfoTool(database_url=settings.database_url))
 
     # API调用工具
     if settings.enable_api_tool:
@@ -79,8 +74,6 @@ def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
 __all__ = [
     "get_available_tools",
     "load_mcp_tools_async",
-    "DatabaseQueryTool",
-    "DatabaseInfoTool",
     "APICallTool",
     "CalculatorTool",
     "TextProcessTool",

@@ -95,7 +95,6 @@ cus-ai-agent/
 │   ├── tools/              # 工具集
 │   │   ├── __init__.py     # 工具注册
 │   │   ├── custom_tools.py # 自定义工具
-│   │   ├── database.py     # 数据库工具
 │   │   ├── api_caller.py   # API 调用工具
 │   │   ├── rag_tool.py     # RAG 工具
 │   │   └── document_loader.py  # 文档加载器

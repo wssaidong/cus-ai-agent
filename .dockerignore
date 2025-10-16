@@ -129,3 +129,4 @@ LICENSE
 Jenkinsfile
 
 .langgraph_api
+*.example.yaml

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(
         protected_namespaces=('settings_',),
-        extra='forbid',
+        extra='ignore',
         env_file=str(ENV_FILE),  # 使用绝对路径,确保无论在哪个目录运行都能找到 .env 文件
         env_file_encoding='utf-8',
         case_sensitive=False
@@ -38,15 +38,12 @@ class Settings(BaseSettings):
     # 通义千问配置
     dashscope_api_key: Optional[str] = Field(default=None, alias="DASHSCOPE_API_KEY")
 
-    # 数据库配置
-    database_url: Optional[str] = Field(default=None, alias="DATABASE_URL")
 
     # 日志配置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: str = Field(default="json", alias="LOG_FORMAT")
 
     # 工具配置
-    enable_database_tool: bool = Field(default=False, alias="ENABLE_DATABASE_TOOL")
     enable_api_tool: bool = Field(default=True, alias="ENABLE_API_TOOL")
 
     # MCP工具配置

@@ -23,7 +23,6 @@
 - ✅ 支持RAG知识库（Milvus向量数据库）
 - ✅ **支持独立的 Embedding API 配置** - 对话和 RAG 可使用不同的 API
 - ✅ **支持 MCP 工具** - 可配置多个 MCP 服务器，单独启用/禁用
-- ✅ 支持数据库查询（可选）
 - ✅ 支持流式输出（SSE）
 - ✅ OpenAPI文档自动生成
 - ✅ 结构化日志记录
@@ -59,7 +58,6 @@ cus-ai-agent/
 │   │   ├── nodes.py        # 节点定义
 │   │   └── state.py        # 状态定义
 │   ├── tools/              # 工具集
-│   │   ├── database.py     # 数据库工具
 │   │   ├── api_caller.py   # API调用工具
 │   │   └── custom_tools.py # 自定义工具
 │   ├── api/                # API接口
@@ -350,14 +348,6 @@ chmod +x scripts/test_api.sh
 智能体: 使用API调用工具获取数据...
 ```
 
-### 4. 数据库工具（database_query）
-
-执行数据库查询（需要配置DATABASE_URL）：
-
-```
-用户: 查询用户表中的所有数据
-智能体: 使用数据库工具执行查询...
-```
 
 ## 配置说明
 
@@ -372,13 +362,11 @@ chmod +x scripts/test_api.sh
 | API_HOST | API主机 | 0.0.0.0 |
 | API_PORT | API端口 | 8000 |
 | LOG_LEVEL | 日志级别 | INFO |
-| DATABASE_URL | 数据库URL | 可选 |
 
 ### 工具开关
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| ENABLE_DATABASE_TOOL | 启用数据库工具 | false |
 | ENABLE_API_TOOL | 启用API调用工具 | true |
 | ENABLE_SEARCH_TOOL | 启用搜索工具 | false |
 
@@ -441,11 +429,6 @@ gunicorn src.api.main:app \
 
 修改`.env`文件中的`MODEL_NAME`和相关API配置。
 
-### 2. 如何添加数据库支持？
-
-1. 配置`DATABASE_URL`环境变量
-2. 设置`ENABLE_DATABASE_TOOL=true`
-3. 在`src/tools/database.py`中实现数据库连接逻辑
 
 ### 3. 如何启用流式输出？
 

@@ -220,20 +220,6 @@ MAX_TOKENS=1000
 TEMPERATURE=0.5
 ```
 
-### Q: 如何配置数据库？
-
-**A:**
-
-```bash
-# PostgreSQL
-DATABASE_URL=postgresql://user:pass@localhost:5432/db
-
-# MySQL
-DATABASE_URL=mysql+pymysql://user:pass@localhost:3306/db
-
-# 启用数据库工具
-ENABLE_DATABASE_TOOL=true
-```
 
 ### Q: 如何启用 LangSmith 追踪？
 

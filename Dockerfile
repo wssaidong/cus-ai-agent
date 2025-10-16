@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.4
-# 极速优化 Dockerfile - 针对轻量级依赖优化
+# 优化 Dockerfile - 使用 requirements.txt 管理依赖
 # 构建时间: 3-5分钟 | 镜像大小: ~1.5GB
+#
+# 更新依赖步骤:
+# 1. 修改 requirements.txt
+# 2. 运行: make docker-build-no-cache
+# 3. 验证: docker run --rm cus-ai-agent:latest pip list
 
 # ==========================================
 # 阶段 1: 依赖构建器
@@ -27,48 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制依赖文件(利用 Docker 缓存层)
 COPY requirements.txt .
 
-# 分层安装策略 - 按变更频率分组
-# 第1层: 核心框架(很少变更)
+# 使用 requirements.txt 安装所有依赖
+# 使用 pip cache mount 加速构建
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install \
-    fastapi==0.115.0 \
-    uvicorn[standard]==0.32.0 \
-    pydantic==2.9.2 \
-    pydantic-settings==2.6.1
-
-# 第2层: LangChain 生态(偶尔变更)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install \
-    langchain==0.3.7 \
-    langchain-core==0.3.15 \
-    langchain-community==0.3.5 \
-    langchain-openai==0.2.5 \
-    langgraph==0.2.45 \
-    langsmith==0.1.143
-
-# 第3层: 其他依赖(一次性安装)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install \
-    httpx==0.27.2 \
-    aiohttp==3.10.10 \
-    sqlalchemy==2.0.36 \
-    asyncpg==0.30.0 \
-    pymysql==1.1.1 \
-    python-dotenv==1.0.1 \
-    python-multipart==0.0.12 \
-    pyyaml==6.0.2 \
-    nest-asyncio==1.6.0 \
-    loguru==0.7.2 \
-    pytest==8.3.3 \
-    pytest-asyncio==0.24.0 \
-    pymilvus==2.5.7 \
-    langchain-milvus==0.2.0 \
-    pypdf==5.1.0 \
-    python-docx==1.1.2 \
-    markdown==3.7 \
-    tiktoken==0.8.0 \
-    beautifulsoup4==4.12.3 \
-    lxml==5.1.0
+    pip install --prefix=/install -r requirements.txt
 
 # ==========================================
 # 阶段 2: 运行时镜像(最小化)
@@ -102,8 +69,9 @@ COPY --chown=appuser:appuser tiktoken_cache/cl100k_base.tiktoken /app/.tiktoken_
 
 # 复制项目文件(放在最后,利用缓存)
 COPY --chown=appuser:appuser src/ ./src/
-COPY --chown=appuser:appuser run.py .
+COPY --chown=appuser:appuser config/ ./config/
 COPY --chown=appuser:appuser .env .
+COPY --chown=appuser:appuser run.py .
 
 # 切换到非 root 用户
 USER appuser

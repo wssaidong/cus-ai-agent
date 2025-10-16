@@ -7,7 +7,7 @@
 ### 核心特性
 
 - 🤖 **智能体编排**: 基于 LangGraph 的状态机管理,支持多轮对话
-- 🔧 **工具集成**: 计算器、文本处理、API 调用、数据库查询、RAG 检索
+- 🔧 **工具集成**: 计算器、文本处理、API 调用、RAG 检索
 - 🌐 **OpenAI 兼容**: 支持 OpenAI API 格式,可直接替换使用
 - 📊 **可观测性**: LangSmith 追踪、结构化日志、性能监控
 - 🚀 **生产就绪**: Docker 部署、负载均衡、高可用支持
@@ -81,7 +81,6 @@ class AgentState(TypedDict):
 
 #### 3.3.3 工具集
 
-- **数据库工具**: 执行SQL查询、数据CRUD操作
 - **API调用工具**: 调用外部HTTP API
 - **搜索工具**: 网络搜索、知识库检索
 - **自定义工具**: 业务特定工具
@@ -134,7 +133,6 @@ class AgentState(TypedDict):
 
 - `OPENAI_API_KEY`: OpenAI API密钥
 - `MODEL_NAME`: 使用的模型名称
-- `DATABASE_URL`: 数据库连接URL
 - `LOG_LEVEL`: 日志级别
 - `API_HOST`: API服务主机
 - `API_PORT`: API服务端口

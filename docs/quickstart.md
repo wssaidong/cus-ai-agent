@@ -349,7 +349,6 @@ LOG_FORMAT=json # json 或 text
 #### 工具配置
 
 ```env
-ENABLE_DATABASE_TOOL=false
 ENABLE_API_TOOL=true
 ENABLE_RAG_TOOL=false
 ```

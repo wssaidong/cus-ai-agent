@@ -75,7 +75,12 @@ dev: ## 开发模式启动（自动重载）
 
 docker-build: ## 构建 Docker 镜像
 	@echo "$(BLUE)构建 Docker 镜像...$(NC)"
-	docker build -t cus-ai-agent:latest .
+	@bash scripts/build_docker.sh
+	@echo "$(GREEN)✓ Docker 镜像构建完成$(NC)"
+
+docker-build-no-cache: ## 强制重新构建 Docker 镜像(不使用缓存)
+	@echo "$(BLUE)强制重新构建 Docker 镜像...$(NC)"
+	@bash scripts/build_docker.sh --no-cache
 	@echo "$(GREEN)✓ Docker 镜像构建完成$(NC)"
 
 docker-run: ## 运行 Docker 容器
