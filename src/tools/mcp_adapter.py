@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from src.config.mcp_config import mcp_config_manager
 from src.utils import app_logger
+from .tool_name_validator import sanitize_tool_names
 
 
 async def create_mcp_tools_async() -> List[BaseTool]:
@@ -61,6 +62,9 @@ async def create_mcp_tools_async() -> List[BaseTool]:
         tools = await client.get_tools()
 
         app_logger.info(f"成功加载 {len(tools)} 个 MCP 工具")
+
+        # 清理工具名称，确保符合 OpenAI API 规范
+        tools = sanitize_tool_names(tools)
 
         # 打印工具信息
         for tool in tools:
