@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 from src.utils import app_logger
 from src.agent import agent_graph, AgentState
 from src.agent.nodes import create_dynamic_agent_executor
+from src.agent.memory import get_memory_manager
 from src.config import settings
 from .models import (
     ChatRequest, ChatResponse, HealthResponse, ErrorResponse,
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/api/v1", tags=["智能体"])
 async def chat(request: ChatRequest) -> ChatResponse:
     """
     普通对话接口
-    
+
     - **message**: 用户消息内容
     - **session_id**: 会话ID（可选）
     - **config**: 配置参数（可选）
@@ -38,7 +39,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # 生成会话ID
         session_id = request.session_id or str(uuid.uuid4())
-        
+
         # 初始化状态
         initial_state: AgentState = {
             "messages": [HumanMessage(content=request.message)],
@@ -52,13 +53,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
             "iteration": 0,
             "is_finished": False,
         }
-        
+
         # 执行智能体
         result = agent_graph.invoke(initial_state)
-        
+
         # 计算执行时间
         execution_time = time.time() - start_time
-        
+
         # 构建响应
         response = ChatResponse(
             response=result.get("final_response", "抱歉，我无法生成响应。"),
@@ -71,7 +72,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
 
         return response
-        
+
     except Exception as e:
         app_logger.error(f"聊天请求失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -81,12 +82,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
 async def chat_stream(request: ChatRequest):
     """
     流式对话接口（Server-Sent Events）
-    
+
     - **message**: 用户消息内容
     - **session_id**: 会话ID（可选）
     - **config**: 配置参数（可选）
     """
-    
+
     async def generate() -> AsyncIterator[str]:
         """生成流式响应"""
         try:
@@ -94,10 +95,10 @@ async def chat_stream(request: ChatRequest):
 
             # 生成会话ID
             session_id = request.session_id or str(uuid.uuid4())
-            
+
             # 发送开始事件
             yield f"data: {{'type': 'start', 'session_id': '{session_id}'}}\n\n"
-            
+
             # 初始化状态
             initial_state: AgentState = {
                 "messages": [HumanMessage(content=request.message)],
@@ -111,7 +112,7 @@ async def chat_stream(request: ChatRequest):
                 "iteration": 0,
                 "is_finished": False,
             }
-            
+
             # 流式执行智能体
             async for event in agent_graph.astream(initial_state):
                 # 发送中间事件
@@ -119,17 +120,17 @@ async def chat_stream(request: ChatRequest):
                     node_output = event["llm"]
                     if node_output.get("final_response"):
                         yield f"data: {{'type': 'token', 'content': '{node_output['final_response']}'}}\n\n"
-            
+
             # 计算执行时间
             execution_time = time.time() - start_time
-            
+
             # 发送完成事件
             yield f"data: {{'type': 'end', 'execution_time': {execution_time:.2f}}}\n\n"
 
         except Exception as e:
             app_logger.error(f"流式聊天请求失败: {str(e)}")
             yield f"data: {{'type': 'error', 'message': '{str(e)}'}}\n\n"
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
@@ -379,4 +380,158 @@ async def _chat_completions_stream(request: CompletionRequest):
             "X-Accel-Buffering": "no",
         }
     )
+
+
+# ==========================================
+# 记忆管理 API 接口
+# ==========================================
+
+@router.get("/memory/sessions", summary="获取所有会话")
+async def get_sessions():
+    """
+    获取所有会话列表
+
+    Returns:
+        会话列表
+    """
+    try:
+        memory_manager = get_memory_manager()
+        sessions = memory_manager.list_sessions()
+        return {
+            "status": "success",
+            "data": sessions,
+            "count": len(sessions)
+        }
+    except Exception as e:
+        app_logger.error(f"获取会话列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/sessions/{session_id}", summary="获取会话记忆")
+async def get_session_memory(session_id: str):
+    """
+    获取指定会话的记忆信息
+
+    Args:
+        session_id: 会话ID
+
+    Returns:
+        会话记忆信息
+    """
+    try:
+        memory_manager = get_memory_manager()
+        memory = memory_manager.get_session_memory(session_id)
+
+        if "error" in memory:
+            raise HTTPException(status_code=404, detail=memory["error"])
+
+        return {
+            "status": "success",
+            "data": memory
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"获取会话记忆失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/sessions/{session_id}", summary="清空会话记忆")
+async def clear_session_memory(session_id: str):
+    """
+    清空指定会话的记忆
+
+    Args:
+        session_id: 会话ID
+
+    Returns:
+        清空结果
+    """
+    try:
+        memory_manager = get_memory_manager()
+        success = memory_manager.clear_session_memory(session_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"会话 {session_id} 不存在")
+
+        return {
+            "status": "success",
+            "message": f"已清空会话 {session_id} 的记忆"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"清空会话记忆失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/memory/all", summary="清空所有记忆")
+async def clear_all_memory():
+    """
+    清空所有会话的记忆
+
+    Returns:
+        清空结果
+    """
+    try:
+        memory_manager = get_memory_manager()
+        count = memory_manager.clear_all_memory()
+
+        return {
+            "status": "success",
+            "message": f"已清空所有记忆，共 {count} 个会话"
+        }
+    except Exception as e:
+        app_logger.error(f"清空所有记忆失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/stats", summary="获取记忆统计")
+async def get_memory_stats():
+    """
+    获取记忆统计信息
+
+    Returns:
+        统计信息
+    """
+    try:
+        memory_manager = get_memory_manager()
+        stats = memory_manager.get_memory_stats()
+
+        return {
+            "status": "success",
+            "data": stats
+        }
+    except Exception as e:
+        app_logger.error(f"获取记忆统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/memory/export/{session_id}", summary="导出会话记忆")
+async def export_session_memory(session_id: str):
+    """
+    导出指定会话的记忆数据
+
+    Args:
+        session_id: 会话ID
+
+    Returns:
+        导出的记忆数据
+    """
+    try:
+        memory_manager = get_memory_manager()
+        memory_data = memory_manager.export_session_memory(session_id)
+
+        if "error" in memory_data:
+            raise HTTPException(status_code=404, detail=memory_data["error"])
+
+        return {
+            "status": "success",
+            "data": memory_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"导出会话记忆失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
