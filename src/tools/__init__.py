@@ -5,6 +5,7 @@ from src.config import settings
 from src.utils import app_logger
 from .api_caller import APICallTool
 from .custom_tools import CalculatorTool, TextProcessTool
+from .knowledge_write_tool import KnowledgeBaseWriteTool, KnowledgeBaseUpdateTool
 
 # 全局 MCP 工具缓存
 _mcp_tools_cache: List[BaseTool] = []
@@ -60,6 +61,11 @@ def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
             rag_tool = create_rag_search_tool()
             tools.append(rag_tool)
             app_logger.info("成功加载 RAG 知识库工具")
+
+            # 添加知识库写入工具
+            tools.append(KnowledgeBaseWriteTool())
+            tools.append(KnowledgeBaseUpdateTool())
+            app_logger.info("成功加载知识库写入和更新工具")
         except Exception as e:
             app_logger.error(f"加载 RAG 工具失败: {str(e)}")
 
@@ -77,5 +83,7 @@ __all__ = [
     "APICallTool",
     "CalculatorTool",
     "TextProcessTool",
+    "KnowledgeBaseWriteTool",
+    "KnowledgeBaseUpdateTool",
 ]
 
