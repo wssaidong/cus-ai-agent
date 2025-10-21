@@ -44,34 +44,7 @@ def test_chat_basic():
     assert "metadata" in data
 
 
-def test_chat_calculator():
-    """测试计算器工具"""
-    response = client.post(
-        "/api/v1/chat",
-        json={
-            "message": "帮我计算 10 + 20",
-            "session_id": "test-calc"
-        }
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "response" in data
-    # 响应中应该包含计算结果
-    assert "30" in data["response"]
 
-
-def test_chat_text_process():
-    """测试文本处理工具"""
-    response = client.post(
-        "/api/v1/chat",
-        json={
-            "message": "请把 hello 转换为大写",
-            "session_id": "test-text"
-        }
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "response" in data
 
 
 def test_chat_invalid_request():

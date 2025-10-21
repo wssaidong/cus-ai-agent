@@ -53,21 +53,13 @@ prompt = ChatPromptTemplate.from_messages([
 【工具使用决策流程】：
 第一步：查看系统提供的决策信息
   - 如果推荐使用 knowledge_base_search → 立即使用该工具
-  - 如果推荐使用其他工具 → 按推荐使用
 
 第二步：根据工具返回结果判断
   - 如果知识库有相关信息 → 基于知识库内容回答
-  - 如果知识库无相关信息 → 考虑使用其他工具或基于通用知识回答
-
-第三步：多工具组合
-  - 如果问题复杂，可能需要多个工具配合
-  - 按推荐工具列表依次使用
+  - 如果知识库无相关信息 → 基于通用知识回答
 
 【可用工具列表】：
-- knowledge_base_search: 【优先使用】从知识库中搜索相关信息（RAG工具）
-- calculator: 执行数学计算
-- text_process: 处理文本（大小写转换、反转等）
-- api_call: 调用外部HTTP API
+- knowledge_base_search: 从知识库中搜索相关信息（RAG工具）
 
 【回答要求】：
 1. 优先基于知识库内容回答，确保信息准确性
@@ -192,7 +184,7 @@ def _check_knowledge_base_relevance(query: str) -> Optional[str]:
                     top_similarity = 1 - results[0][1]
                     if top_similarity >= 0.6:  # 相似度阈值
                         app_logger.info(f"知识库预检查命中，最高相似度: {top_similarity:.2%}")
-                        return f"【知识库预检查】发现高度相关内容（相似度: {top_similarity:.2%}），建议优先使用 knowledge_base_search 工具获取详细信息。"
+                        return f"【知识库预检查】发现高度相关内容（相似度: {top_similarity:.2%}），使用 knowledge_base_search 工具获取详细信息。"
         except Exception as e:
             app_logger.warning(f"知识库预检查失败: {str(e)}")
 

@@ -269,7 +269,7 @@ class RAGSearchTool(BaseTool):
 
     name: str = "knowledge_base_search"
     description: str = """
-    【优先使用】从知识库中搜索相关信息的工具。这是最重要的信息来源。
+    从知识库中搜索相关信息的工具。这是最重要的信息来源。
 
     【适用场景】（遇到以下任何场景都应该使用此工具）：
     1. 查询文档、手册、规范、标准等资料内容

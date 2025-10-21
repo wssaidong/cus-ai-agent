@@ -3,8 +3,6 @@ from typing import List
 from langchain.tools import BaseTool
 from src.config import settings
 from src.utils import app_logger
-from .api_caller import APICallTool
-from .custom_tools import CalculatorTool, TextProcessTool
 from .knowledge_write_tool import KnowledgeBaseWriteTool, KnowledgeBaseUpdateTool
 
 # 全局 MCP 工具缓存
@@ -45,15 +43,6 @@ def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
     """
     tools = []
 
-
-    # API调用工具
-    if settings.enable_api_tool:
-        tools.append(APICallTool(timeout=settings.timeout_seconds))
-
-    # 自定义工具（默认启用）
-    tools.append(CalculatorTool())
-    tools.append(TextProcessTool())
-
     # RAG知识库工具
     if settings.enable_rag_tool:
         try:
@@ -80,9 +69,6 @@ def get_available_tools(include_mcp: bool = False) -> List[BaseTool]:
 __all__ = [
     "get_available_tools",
     "load_mcp_tools_async",
-    "APICallTool",
-    "CalculatorTool",
-    "TextProcessTool",
     "KnowledgeBaseWriteTool",
     "KnowledgeBaseUpdateTool",
 ]

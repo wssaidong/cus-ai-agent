@@ -15,9 +15,6 @@ import json
 class DecisionType(Enum):
     """决策类型"""
     KNOWLEDGE_BASE = "knowledge_base"  # 知识库搜索
-    CALCULATOR = "calculator"  # 计算器
-    TEXT_PROCESS = "text_process"  # 文本处理
-    API_CALL = "api_call"  # API调用
     GENERAL_CHAT = "general_chat"  # 通用对话
     MULTI_TOOL = "multi_tool"  # 多工具组合
 
@@ -60,22 +57,7 @@ class DecisionEngine:
             "文件", "文本", "内容", "信息", "数据", "记录"
         }
 
-        self.calculator_keywords = {
-            "计算", "算", "加", "减", "乘", "除", "等于", "多少",
-            "数学", "求和", "平均", "百分比", "比例", "统计",
-            "数字", "数值", "结果", "答案"
-        }
 
-        self.text_process_keywords = {
-            "转换", "处理", "大写", "小写", "反转", "长度",
-            "字符", "文本", "字符串", "替换", "分割", "合并",
-            "格式", "编码", "解码"
-        }
-
-        self.api_keywords = {
-            "调用", "请求", "API", "接口", "HTTP", "GET", "POST",
-            "数据", "服务", "远程", "网络", "连接", "通信"
-        }
 
     def _keyword_match_score(self, query: str, keywords: set) -> float:
         """
@@ -157,13 +139,9 @@ class DecisionEngine:
         try:
             # 第一步：关键词匹配评分
             kb_score = self._keyword_match_score(query, self.knowledge_keywords)
-            calc_score = self._keyword_match_score(query, self.calculator_keywords)
-            text_score = self._keyword_match_score(query, self.text_process_keywords)
-            api_score = self._keyword_match_score(query, self.api_keywords)
 
             app_logger.debug(
-                f"关键词匹配分数 - KB: {kb_score:.2f}, Calc: {calc_score:.2f}, "
-                f"Text: {text_score:.2f}, API: {api_score:.2f}"
+                f"关键词匹配分数 - KB: {kb_score:.2f}"
             )
 
             # 第二步：使用LLM进行深度分析
@@ -177,11 +155,9 @@ class DecisionEngine:
                 should_search_kb = llm_analysis.get("should_search_kb", False)
             else:
                 # 如果LLM分析失败，使用关键词匹配结果
+                # 优先级：knowledge_base > general_chat
                 scores = {
                     DecisionType.KNOWLEDGE_BASE: kb_score,
-                    DecisionType.CALCULATOR: calc_score,
-                    DecisionType.TEXT_PROCESS: text_score,
-                    DecisionType.API_CALL: api_score,
                 }
 
                 # 找到最高分的类型
@@ -246,21 +222,9 @@ class DecisionEngine:
         # 添加主要工具
         if primary_type == "knowledge_base":
             tools.append("knowledge_base_search")
-        elif primary_type == "calculator":
-            tools.append("calculator")
-        elif primary_type == "text_process":
-            tools.append("text_process")
-        elif primary_type == "api_call":
-            tools.append("api_call")
         elif primary_type == "multi_tool":
             # 多工具组合
             secondary = llm_analysis.get("secondary_types", [])
-            if "calculator" in secondary:
-                tools.append("calculator")
-            if "text_process" in secondary:
-                tools.append("text_process")
-            if "api_call" in secondary:
-                tools.append("api_call")
             if "knowledge_base" in secondary:
                 tools.append("knowledge_base_search")
 
