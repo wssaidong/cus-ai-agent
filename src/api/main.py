@@ -8,6 +8,7 @@ from src.config import settings
 from src.utils import app_logger
 from .routes import router
 from .knowledge_routes import router as knowledge_router
+from .recommendation_routes import router as recommendation_router
 
 
 # 创建FastAPI应用
@@ -32,6 +33,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(router)
 app.include_router(knowledge_router)
+app.include_router(recommendation_router)
 
 
 @app.on_event("startup")
