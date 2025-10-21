@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     langchain_api_key: Optional[str] = Field(default=None, alias="LANGCHAIN_API_KEY")
     langchain_project: str = Field(default="cus-ai-agent", alias="LANGCHAIN_PROJECT")
 
+    # A2A AgentCard 配置
+    a2a_enabled: bool = Field(default=False, alias="A2A_ENABLED")
+    a2a_server_addresses: str = Field(default="127.0.0.1:8848", alias="A2A_SERVER_ADDRESSES")
+    a2a_namespace: str = Field(default="public", alias="A2A_NAMESPACE")
+    a2a_service_name: str = Field(default="cus-ai-agent", alias="A2A_SERVICE_NAME")
+    a2a_username: Optional[str] = Field(default=None, alias="A2A_USERNAME")
+    a2a_password: Optional[str] = Field(default=None, alias="A2A_PASSWORD")
+
 
 # 全局配置实例
 settings = Settings()

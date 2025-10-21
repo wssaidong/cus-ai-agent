@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from src.config import settings
 from src.utils import app_logger
+from src.utils.a2a_auto_register import get_a2a_auto_register
 from .routes import router
 from .knowledge_routes import router as knowledge_router
 from .recommendation_routes import router as recommendation_router
+from .a2a_routes import router as a2a_router
 
 
 # 创建FastAPI应用
@@ -34,6 +36,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(knowledge_router)
 app.include_router(recommendation_router)
+app.include_router(a2a_router)
 
 
 @app.on_event("startup")
@@ -58,6 +61,17 @@ async def startup_event():
     except Exception as e:
         app_logger.error(f"加载 MCP 工具失败: {str(e)}")
 
+    # 初始化并注册 A2A AgentCard
+    try:
+        a2a_register = get_a2a_auto_register()
+        if await a2a_register.initialize():
+            # 自动注册 AgentCard
+            await a2a_register.register_agent_card()
+        else:
+            app_logger.warning("A2A 自动注册初始化失败，AgentCard 未注册")
+    except Exception as e:
+        app_logger.error(f"A2A AgentCard 注册失败: {str(e)}")
+
     app_logger.info("=" * 50)
 
 
@@ -65,6 +79,15 @@ async def startup_event():
 async def shutdown_event():
     """关闭事件"""
     app_logger.info("关闭应用")
+
+    # 注销 A2A AgentCard
+    try:
+        a2a_register = get_a2a_auto_register()
+        if a2a_register.registered:
+            await a2a_register.deregister_agent_card()
+        await a2a_register.close()
+    except Exception as e:
+        app_logger.error(f"A2A AgentCard 注销失败: {str(e)}")
 
 
 @app.get("/", tags=["根路径"])
