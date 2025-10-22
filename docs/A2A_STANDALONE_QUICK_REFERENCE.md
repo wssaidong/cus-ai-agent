@@ -16,6 +16,16 @@ A2A_NAMESPACE=public                          # 命名空间
 A2A_SERVICE_NAME=cus-ai-agent                # 服务名称
 A2A_USERNAME=nacos                            # 认证用户名
 A2A_PASSWORD=your_password                    # 认证密码
+
+# A2A 服务 URL 配置（用于 AgentCard 注册）
+# 方式1：直接指定完整 URL（优先级最高）
+A2A_SERVICE_URL=http://192.168.1.100:8000/api/v1/a2a
+
+# 方式2：分别指定 host 和 port（如果未设置 A2A_SERVICE_URL）
+# A2A_SERVICE_HOST=192.168.1.100
+# A2A_SERVICE_PORT=8000
+
+# 如果以上都未设置，将使用 API_HOST 和 API_PORT
 ```
 
 ### Python 配置
@@ -30,6 +40,11 @@ print(settings.a2a_namespace)         # "public"
 print(settings.a2a_service_name)      # "cus-ai-agent"
 print(settings.a2a_username)          # "nacos"
 print(settings.a2a_password)          # "your_password"
+
+# 访问 A2A 服务 URL 配置
+print(settings.a2a_service_url)       # "http://192.168.1.100:8000/api/v1/a2a" 或 None
+print(settings.a2a_service_host)      # "192.168.1.100" 或 None
+print(settings.a2a_service_port)      # 8000 或 None
 ```
 
 ## API 端点

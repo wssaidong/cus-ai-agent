@@ -79,8 +79,19 @@ class A2AAutoRegister:
 
             # 自动生成 URL
             if not url:
-                host = settings.api_host if settings.api_host != "0.0.0.0" else "127.0.0.1"
-                url = f"http://{host}:{settings.api_port}/a2a/v1"
+                # 优先使用 A2A_SERVICE_URL
+                if settings.a2a_service_url:
+                    url = settings.a2a_service_url
+                else:
+                    # 使用 A2A 专项配置，如果未设置则回退到通用配置
+                    host = settings.a2a_service_host or settings.api_host
+                    port = settings.a2a_service_port or settings.api_port
+
+                    # 如果 host 是 0.0.0.0，替换为 127.0.0.1
+                    if host == "0.0.0.0":
+                        host = "127.0.0.1"
+
+                    url = f"http://{host}:{port}/api/v1/a2a"
 
             # 默认技能列表
             if not skills:
@@ -123,7 +134,7 @@ class A2AAutoRegister:
             if not provider:
                 provider = {
                     "organization": "Your Organization",
-                    "url": "https://your-organization.com",
+                    "url": "https://ai.com",
                 }
 
             # 创建或更新 AgentCard

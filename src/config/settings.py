@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     a2a_username: Optional[str] = Field(default=None, alias="A2A_USERNAME")
     a2a_password: Optional[str] = Field(default=None, alias="A2A_PASSWORD")
 
+    # A2A 服务 URL 配置（用于 AgentCard 注册）
+    a2a_service_host: Optional[str] = Field(default=None, alias="A2A_SERVICE_HOST")
+    a2a_service_port: Optional[int] = Field(default=None, alias="A2A_SERVICE_PORT")
+    a2a_service_url: Optional[str] = Field(default=None, alias="A2A_SERVICE_URL")
+
 
 # 全局配置实例
 settings = Settings()
