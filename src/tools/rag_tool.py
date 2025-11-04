@@ -8,8 +8,14 @@ from typing import Optional, List, Dict, Any
 from langchain.tools import BaseTool
 from langchain_openai import OpenAIEmbeddings
 from langchain_milvus import Milvus
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+try:
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+except ImportError:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+try:
+    from langchain.schema import Document
+except ImportError:
+    from langchain_core.documents import Document
 from pydantic import Field, ConfigDict
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 from src.utils import app_logger

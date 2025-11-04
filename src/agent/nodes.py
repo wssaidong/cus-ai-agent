@@ -4,7 +4,12 @@
 from typing import Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+try:
+    from langchain.agents import AgentExecutor, create_openai_tools_agent
+except ImportError:
+    from langgraph.prebuilt import create_react_agent
+    AgentExecutor = None
+    create_openai_tools_agent = None
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from src.config import settings
 from src.utils import app_logger
@@ -82,21 +87,26 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 # 创建默认智能体
-agent = create_openai_tools_agent(llm, tools, prompt)
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
-    verbose=True,
-    max_iterations=settings.max_iterations,
-    handle_parsing_errors=True,
-)
+if create_openai_tools_agent and AgentExecutor:
+    # 使用旧版 langchain.agents
+    agent = create_openai_tools_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        max_iterations=settings.max_iterations,
+        handle_parsing_errors=True,
+    )
+else:
+    # 使用新版 langgraph.prebuilt
+    agent_executor = create_react_agent(llm, tools)
 
 
 def create_dynamic_agent_executor(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None
-) -> AgentExecutor:
+):
     """
     创建动态智能体执行器
 
@@ -106,7 +116,7 @@ def create_dynamic_agent_executor(
         max_tokens: 最大token数
 
     Returns:
-        AgentExecutor: 智能体执行器
+        智能体执行器
     """
     # 创建动态LLM
     dynamic_llm = ChatOpenAI(
@@ -121,14 +131,19 @@ def create_dynamic_agent_executor(
     current_tools = get_available_tools(include_mcp=True)
 
     # 创建动态智能体
-    dynamic_agent = create_openai_tools_agent(dynamic_llm, current_tools, prompt)
-    dynamic_executor = AgentExecutor(
-        agent=dynamic_agent,
-        tools=current_tools,
-        verbose=True,
-        max_iterations=settings.max_iterations,
-        handle_parsing_errors=True,
-    )
+    if create_openai_tools_agent and AgentExecutor:
+        # 使用旧版 langchain.agents
+        dynamic_agent = create_openai_tools_agent(dynamic_llm, current_tools, prompt)
+        dynamic_executor = AgentExecutor(
+            agent=dynamic_agent,
+            tools=current_tools,
+            verbose=True,
+            max_iterations=settings.max_iterations,
+            handle_parsing_errors=True,
+        )
+    else:
+        # 使用新版 langgraph.prebuilt
+        dynamic_executor = create_react_agent(dynamic_llm, current_tools)
 
     return dynamic_executor
 

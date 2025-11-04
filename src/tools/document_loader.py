@@ -5,7 +5,10 @@
 import os
 from typing import List, Optional
 from pathlib import Path
-from langchain.schema import Document
+try:
+    from langchain.schema import Document
+except ImportError:
+    from langchain_core.documents import Document
 from langchain_community.document_loaders import (
     TextLoader,
     PyPDFLoader,

@@ -11,7 +11,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="用户消息", min_length=1)
     session_id: Optional[str] = Field(None, description="会话ID")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="配置参数")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -30,7 +30,7 @@ class ChatResponse(BaseModel):
     response: str = Field(..., description="智能体响应")
     session_id: Optional[str] = Field(None, description="会话ID")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="元数据")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -82,6 +82,15 @@ class CompletionRequest(BaseModel):
     presence_penalty: Optional[float] = Field(default=0, ge=-2, le=2, description="存在惩罚")
     frequency_penalty: Optional[float] = Field(default=0, ge=-2, le=2, description="频率惩罚")
     user: Optional[str] = Field(None, description="用户标识")
+
+    # 多智能体相关参数
+    use_multi_agent: Optional[bool] = Field(default=True, description="是否使用多智能体系统")
+    coordination_mode: Optional[Literal["sequential", "parallel", "hierarchical", "feedback"]] = Field(
+        default="sequential",
+        description="多智能体协作模式: sequential(顺序)/parallel(并行)/hierarchical(层级)/feedback(反馈)"
+    )
+    max_iterations: Optional[int] = Field(default=10, ge=1, le=50, description="最大迭代次数")
+    max_feedback_rounds: Optional[int] = Field(default=3, ge=1, le=10, description="最大反馈轮次(仅feedback模式)")
 
     class Config:
         json_schema_extra = {
