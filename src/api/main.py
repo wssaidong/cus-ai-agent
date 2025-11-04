@@ -11,6 +11,7 @@ from .routes import router
 from .knowledge_routes import router as knowledge_router
 from .recommendation_routes import router as recommendation_router
 from .a2a_routes import router as a2a_router
+from .multi_agent_routes import router as multi_agent_router
 
 
 # 创建FastAPI应用
@@ -37,6 +38,7 @@ app.include_router(router)
 app.include_router(knowledge_router)
 app.include_router(recommendation_router)
 app.include_router(a2a_router)
+app.include_router(multi_agent_router)
 
 
 @app.on_event("startup")
