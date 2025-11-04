@@ -9,21 +9,23 @@ pydantic-settings>=2.6.0
 # ==========================================
 # LangChain 生态系统
 # ==========================================
-# 核心框架 - 使用范围版本,让 pip 自动解决依赖
-langchain>=0.3.7
-langchain-core>=0.3.15
-langchain-community>=0.3.5
-langchain-openai>=0.2.5
+# 核心框架 - 升级到最新稳定版本
+# LangChain 1.0 仍在 alpha 阶段,保持使用 0.3.x 稳定版本
+langchain>=0.3.7,<0.4.0
+langchain-core>=0.3.15,<0.4.0
+langchain-community>=0.3.5,<0.4.0
+langchain-openai>=0.3.0,<0.4.0
 
-# LangGraph 工作流
-langgraph>=0.2.45
-langgraph-cli>=0.1.55
+# LangGraph 工作流 - 升级到 1.0 稳定版本
+langgraph>=1.0.0,<2.0.0
+langgraph-cli>=0.4.0,<1.0.0
+langgraph-checkpoint>=2.0.0,<3.0.0
 
 # LangSmith 追踪和监控
-langsmith>=0.1.143
+langsmith>=0.1.143,<0.2.0
 
 # MCP (Model Context Protocol) 适配器
-langchain-mcp-adapters>=0.1.11
+langchain-mcp-adapters>=0.1.11,<0.2.0
 
 # ==========================================
 # HTTP 客户端

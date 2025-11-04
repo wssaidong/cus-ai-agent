@@ -54,8 +54,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
             "is_finished": False,
         }
 
-        # 执行智能体
-        result = agent_graph.invoke(initial_state)
+        # 执行智能体 - 传递 thread_id 配置以支持 checkpointer
+        config = {"configurable": {"thread_id": session_id}}
+        result = agent_graph.invoke(initial_state, config=config)
 
         # 计算执行时间
         execution_time = time.time() - start_time
@@ -113,8 +114,9 @@ async def chat_stream(request: ChatRequest):
                 "is_finished": False,
             }
 
-            # 流式执行智能体
-            async for event in agent_graph.astream(initial_state):
+            # 流式执行智能体 - 传递 thread_id 配置以支持 checkpointer
+            config = {"configurable": {"thread_id": session_id}}
+            async for event in agent_graph.astream(initial_state, config=config):
                 # 发送中间事件
                 if "llm" in event:
                     node_output = event["llm"]

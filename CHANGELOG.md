@@ -7,7 +7,16 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-11-04
+
+### 重大变更
+- **[破坏性]** 升级 LangGraph 到 1.0 兼容版本 (0.6.8)
+- **[破坏性]** `MemorySaver` 重命名为 `InMemorySaver`
+
 ### 新增
+- 新增 `langgraph-checkpoint>=2.0.0` 依赖
+- 新增升级验证脚本 `scripts/verify_upgrade.sh`
+- 新增完整升级文档 `docs/solutions/langgraph-1.0-upgrade-guide.md`
 - **MCP (Model Context Protocol) 工具支持** - 使用 `langchain-mcp-adapters` 集成 MCP 工具
   - 支持多个 MCP 服务器配置
   - 支持 HTTP (streamable-http) 传输协议
@@ -28,10 +37,31 @@
 - 优化代码注释和文档字符串
 
 ### 变更
+- 升级 `langgraph` 从 0.2.45 到 0.6.8 (1.0 兼容版本)
+- 升级 `langchain-openai` 从 0.2.5 到 0.3.34
+- 升级 `langgraph-cli` 从 0.1.55 到 0.4.4
+- 更新 `src/agent/memory.py` 使用 `InMemorySaver`
+- 更新 `tests/test_memory.py` 适配新 API
+- 添加版本范围限制，确保依赖稳定性
 - **[重要]** 移除 `src/tools/mcp_client.py` 自定义实现
 - **[重要]** MCP 工具加载统一使用 `src/tools/mcp_adapter.py`
 - 新增依赖：`langchain-mcp-adapters>=0.1.11`
 - 更新项目结构文档，反映 MCP 工具的变更
+
+### 修复
+- 修复 LangGraph 1.0 API 兼容性问题
+- 修复记忆管理器类型注解
+
+### 文档
+- 添加 LangGraph 1.0 升级指南
+- 更新记忆管理文档说明 InMemorySaver
+- 添加升级验证步骤和检查清单
+
+### 测试
+- 所有 20 个记忆功能测试通过
+- 验证 InMemorySaver 导入和使用
+- 验证 Agent Graph 正常工作
+- 验证 API 模块正常导入
 
 ### 移除
 - `src/tools/mcp_client.py` - 已被 `mcp_adapter.py` 替代

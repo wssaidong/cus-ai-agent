@@ -1,15 +1,16 @@
 """
 智能体状态定义
 """
-from typing import TypedDict, List, Dict, Any, Optional
+from typing import TypedDict, List, Dict, Any, Optional, Annotated
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
     """智能体状态"""
 
-    # 消息历史
-    messages: List[BaseMessage]
+    # 消息历史 - 使用 add_messages reducer 以支持记忆功能
+    messages: Annotated[List[BaseMessage], add_messages]
 
     # 中间步骤
     intermediate_steps: List[tuple]
