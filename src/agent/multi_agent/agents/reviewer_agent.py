@@ -12,14 +12,14 @@ from src.utils import app_logger
 class ReviewerAgent(BaseAgent):
     """
     评审者智能体
-    
+
     能力:
     - 结果验证
     - 质量评估
     - 错误检测
     - 改进建议
     """
-    
+
     def __init__(self, agent_id: str = "reviewer_001", **kwargs):
         """初始化评审者智能体"""
         super().__init__(
@@ -29,7 +29,7 @@ class ReviewerAgent(BaseAgent):
             description="负责结果验证、质量检查和改进建议",
             **kwargs
         )
-    
+
     def _define_capabilities(self) -> List[AgentCapability]:
         """定义评审者能力"""
         return [
@@ -54,7 +54,7 @@ class ReviewerAgent(BaseAgent):
                 confidence=0.8
             ),
         ]
-    
+
     def _get_default_system_prompt(self) -> str:
         """获取评审者系统提示词"""
         return """你是一个专业的评审者智能体。
@@ -72,37 +72,49 @@ class ReviewerAgent(BaseAgent):
 - 可用性: 结果是否可用
 
 输出格式:
-请以 JSON 格式输出评审结果,包含以下字段:
-{
-    "passed": true/false,
-    "score": 85,
-    "correctness": "正确性评估",
-    "completeness": "完整性评估",
-    "quality": "质量评估",
-    "issues": ["问题1", "问题2"],
-    "suggestions": ["建议1", "建议2"],
-    "summary": "评审总结"
-}
+请以自然、流畅的对话方式输出评审结果。用简洁的段落和编号列表来组织内容。
+
+包含以下内容：
+1. 评审结论：用一句话明确说明是否通过评审
+2. 评分：给出质量评分（0-100分）
+3. 正确性评估：用一段话评估结果的正确性
+4. 完整性评估：用一段话评估结果的完整性
+5. 质量评估：用一段话评估结果的整体质量
+6. 发现的问题：用编号列表（1. 2. 3.）列出存在的问题（如果有）
+7. 改进建议：用编号列表（1. 2. 3.）提供具体的改进建议（如果需要）
+
+注意：
+- 不要使用 JSON 格式
+- 不要使用 Markdown 标记（如 ###、**、- 等）
+- 使用简洁、清晰的语言
+- 直接输出内容，像在和用户对话一样自然
 """
-    
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         处理评审任务
-        
+
         Args:
             state: 当前状态
-            
+
         Returns:
             Dict[str, Any]: 评审结果
         """
         try:
             app_logger.info(f"{self.name} 开始评审结果")
-            
-            # 获取任务信息
+
+            # 获取任务信息 - 兼容字典和字符串格式
             task = state.get("task", {})
-            task_description = task.get("description", "")
-            requirements = task.get("requirements", [])
-            
+            if isinstance(task, dict):
+                task_description = task.get("description", "")
+                requirements = task.get("requirements", [])
+            elif isinstance(task, str):
+                task_description = task
+                requirements = []
+            else:
+                task_description = str(task)
+                requirements = []
+
             # 获取执行结果
             agent_results = state.get("agent_results", {})
             executor_result = None
@@ -110,7 +122,7 @@ class ReviewerAgent(BaseAgent):
                 if "executor" in agent_id:
                     executor_result = result
                     break
-            
+
             if not executor_result:
                 app_logger.warning("未找到执行结果,无法评审")
                 return {
@@ -121,7 +133,7 @@ class ReviewerAgent(BaseAgent):
                     "error": "未找到执行结果",
                     "success": False
                 }
-            
+
             # 构建评审提示
             review_prompt = f"""
 请评审以下执行结果:
@@ -141,47 +153,33 @@ class ReviewerAgent(BaseAgent):
 4. 问题: 存在哪些问题
 5. 建议: 如何改进
 """
-            
+
             # 调用 LLM 进行评审
             messages = [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(content=review_prompt)
             ]
-            
+
             response = await self.llm.ainvoke(messages)
-            
-            # 解析结果
-            import json
-            try:
-                review_result = json.loads(response.content)
-            except json.JSONDecodeError:
-                # 如果不是 JSON,尝试从文本中提取信息
-                review_result = {
-                    "passed": "通过" in response.content or "成功" in response.content,
-                    "summary": response.content,
-                    "raw_output": True
-                }
-            
+
+            # 直接使用文本输出，不再解析 JSON
+            # 从文本中判断是否通过
+            passed = "通过" in response.content or "成功" in response.content or "满足" in response.content
+
             # 构建返回结果
             result = {
                 "agent_id": self.agent_id,
                 "agent_type": self.agent_type.value,
                 "agent_name": self.name,
-                "passed": review_result.get("passed", False),
-                "score": review_result.get("score", 0),
-                "correctness": review_result.get("correctness", ""),
-                "completeness": review_result.get("completeness", ""),
-                "quality": review_result.get("quality", ""),
-                "issues": review_result.get("issues", []),
-                "suggestions": review_result.get("suggestions", []),
-                "summary": review_result.get("summary", ""),
+                "passed": passed,
+                "review_output": response.content,  # 直接使用文本内容
                 "success": True,
-                "output": response.content
+                "output": response.content  # 用户友好的文本输出
             }
-            
+
             app_logger.info(f"{self.name} 评审完成: {'通过' if result['passed'] else '不通过'}")
             return result
-            
+
         except Exception as e:
             app_logger.error(f"{self.name} 评审失败: {str(e)}")
             return {
@@ -192,14 +190,14 @@ class ReviewerAgent(BaseAgent):
                 "passed": False,
                 "success": False
             }
-    
+
     async def review_quality(self, result: Any) -> Dict[str, Any]:
         """
         评审质量
-        
+
         Args:
             result: 待评审的结果
-            
+
         Returns:
             Dict[str, Any]: 质量评审结果
         """
@@ -207,9 +205,9 @@ class ReviewerAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请评审以下结果的质量:\n{result}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
-        
+
         import json
         try:
             review = json.loads(response.content)
@@ -219,14 +217,14 @@ class ReviewerAgent(BaseAgent):
                 "quality": response.content,
                 "agent_id": self.agent_id
             }
-    
+
     async def suggest_improvements(self, result: Any) -> List[str]:
         """
         提供改进建议
-        
+
         Args:
             result: 待改进的结果
-            
+
         Returns:
             List[str]: 改进建议列表
         """
@@ -234,9 +232,9 @@ class ReviewerAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请为以下结果提供改进建议:\n{result}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
-        
+
         import json
         try:
             suggestions = json.loads(response.content)

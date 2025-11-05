@@ -12,14 +12,14 @@ from src.utils import app_logger
 class PlannerAgent(BaseAgent):
     """
     规划师智能体
-    
+
     能力:
     - 任务分解
     - 策略规划
     - 资源分配
     - 风险评估
     """
-    
+
     def __init__(self, agent_id: str = "planner_001", **kwargs):
         """初始化规划师智能体"""
         super().__init__(
@@ -29,7 +29,7 @@ class PlannerAgent(BaseAgent):
             description="负责任务分解、策略制定和计划优化",
             **kwargs
         )
-    
+
     def _define_capabilities(self) -> List[AgentCapability]:
         """定义规划师能力"""
         return [
@@ -54,7 +54,7 @@ class PlannerAgent(BaseAgent):
                 confidence=0.75
             ),
         ]
-    
+
     def _get_default_system_prompt(self) -> str:
         """获取规划师系统提示词"""
         return """你是一个专业的规划师智能体。
@@ -72,41 +72,46 @@ class PlannerAgent(BaseAgent):
 - 灵活性: 考虑可能的变化和调整
 
 输出格式:
-请以 JSON 格式输出规划结果,包含以下字段:
-{
-    "plan": [
-        {
-            "step": 1,
-            "description": "子任务描述",
-            "agent_type": "executor",
-            "priority": "high",
-            "estimated_time": "5分钟",
-            "dependencies": []
-        }
-    ],
-    "strategy": "执行策略说明",
-    "risks": ["风险1", "风险2"],
-    "resources": ["资源1", "资源2"]
-}
+请以自然、流畅的对话方式输出规划结果。用简洁的段落和编号列表来组织内容。
+
+包含以下内容：
+1. 执行计划：将任务分解为具体的执行步骤，每个步骤用编号列表（步骤1、步骤2）说明：
+   - 步骤描述
+   - 优先级（高/中/低）
+   - 预计时间
+2. 执行策略：用一段话说明如何执行这些步骤
+3. 风险评估：用编号列表列出可能的风险和应对措施
+4. 资源需求：用编号列表列出需要的资源和工具
+
+注意：
+- 不要使用 JSON 格式
+- 不要使用 Markdown 标记（如 ###、**、- 等）
+- 使用简洁、清晰的语言
+- 直接输出内容，像在和用户对话一样自然
 """
-    
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         处理规划任务
-        
+
         Args:
             state: 当前状态
-            
+
         Returns:
             Dict[str, Any]: 规划结果
         """
         try:
             app_logger.info(f"{self.name} 开始规划任务")
-            
-            # 获取任务信息
+
+            # 获取任务信息 - 兼容字典和字符串格式
             task = state.get("task", {})
-            task_description = task.get("description", "")
-            
+            if isinstance(task, dict):
+                task_description = task.get("description", "")
+            elif isinstance(task, str):
+                task_description = task
+            else:
+                task_description = str(task)
+
             # 获取分析结果(如果有)
             agent_results = state.get("agent_results", {})
             analysis = None
@@ -114,17 +119,17 @@ class PlannerAgent(BaseAgent):
                 if "analyst" in agent_id:
                     analysis = result.get("analysis", {})
                     break
-            
+
             # 构建规划提示
             planning_prompt = f"""
 请为以下任务制定详细的执行计划:
 
 任务描述: {task_description}
 """
-            
+
             if analysis:
                 planning_prompt += f"\n分析结果: {analysis}\n"
-            
+
             planning_prompt += """
 请提供:
 1. 任务分解: 将任务分解为具体的执行步骤
@@ -132,42 +137,29 @@ class PlannerAgent(BaseAgent):
 3. 风险评估: 识别可能的风险
 4. 资源需求: 列出需要的资源和工具
 """
-            
+
             # 调用 LLM 进行规划
             messages = [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(content=planning_prompt)
             ]
-            
+
             response = await self.llm.ainvoke(messages)
-            
-            # 解析结果
-            import json
-            try:
-                planning_result = json.loads(response.content)
-            except json.JSONDecodeError:
-                planning_result = {
-                    "plan": [],
-                    "strategy": response.content,
-                    "raw_output": True
-                }
-            
+
+            # 直接使用文本输出，不再解析 JSON
             # 构建返回结果
             result = {
                 "agent_id": self.agent_id,
                 "agent_type": self.agent_type.value,
                 "agent_name": self.name,
-                "plan": planning_result.get("plan", []),
-                "strategy": planning_result.get("strategy", ""),
-                "risks": planning_result.get("risks", []),
-                "resources": planning_result.get("resources", []),
+                "plan": response.content,  # 直接使用文本内容
                 "success": True,
-                "output": response.content
+                "output": response.content  # 用户友好的文本输出
             }
-            
-            app_logger.info(f"{self.name} 规划完成,生成 {len(result['plan'])} 个步骤")
+
+            app_logger.info(f"{self.name} 规划完成")
             return result
-            
+
         except Exception as e:
             app_logger.error(f"{self.name} 规划失败: {str(e)}")
             return {
@@ -177,14 +169,14 @@ class PlannerAgent(BaseAgent):
                 "error": str(e),
                 "success": False
             }
-    
+
     async def decompose_task(self, task: str) -> List[Dict[str, Any]]:
         """
         分解任务
-        
+
         Args:
             task: 任务描述
-            
+
         Returns:
             List[Dict[str, Any]]: 子任务列表
         """
@@ -192,23 +184,23 @@ class PlannerAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请将以下任务分解为子任务:\n{task}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
-        
+
         import json
         try:
             result = json.loads(response.content)
             return result.get("plan", [])
         except:
             return []
-    
+
     async def assess_risks(self, plan: List[Dict[str, Any]]) -> List[str]:
         """
         评估风险
-        
+
         Args:
             plan: 执行计划
-            
+
         Returns:
             List[str]: 风险列表
         """
@@ -216,9 +208,9 @@ class PlannerAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请评估以下计划的风险:\n{plan}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
-        
+
         import json
         try:
             result = json.loads(response.content)

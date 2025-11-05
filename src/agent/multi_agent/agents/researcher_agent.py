@@ -13,14 +13,14 @@ from src.utils import app_logger
 class ResearcherAgent(BaseAgent):
     """
     研究员智能体
-    
+
     能力:
     - 深度研究
     - 知识整合
     - 文档生成
     - 引用管理
     """
-    
+
     def __init__(self, agent_id: str = "researcher_001", **kwargs):
         """初始化研究员智能体"""
         super().__init__(
@@ -30,7 +30,7 @@ class ResearcherAgent(BaseAgent):
             description="负责深度研究、知识整合和报告生成",
             **kwargs
         )
-    
+
     def _define_capabilities(self) -> List[AgentCapability]:
         """定义研究员能力"""
         return [
@@ -56,7 +56,7 @@ class ResearcherAgent(BaseAgent):
                 confidence=0.8
             ),
         ]
-    
+
     def _get_default_system_prompt(self) -> str:
         """获取研究员系统提示词"""
         return """你是一个专业的研究员智能体。
@@ -74,40 +74,46 @@ class ResearcherAgent(BaseAgent):
 - 可追溯: 提供清晰的引用
 
 输出格式:
-请以 JSON 格式输出研究结果,包含以下字段:
-{
-    "topic": "研究主题",
-    "summary": "研究摘要",
-    "findings": [
-        {
-            "title": "发现标题",
-            "content": "发现内容",
-            "sources": ["来源1", "来源2"]
-        }
-    ],
-    "conclusions": ["结论1", "结论2"],
-    "references": ["参考文献1", "参考文献2"]
-}
+请以自然、流畅的对话方式输出研究结果。用简洁的段落和编号列表来组织内容。
+
+包含以下内容：
+1. 研究摘要：用一段话简要概述研究主题和核心内容
+2. 关键发现：用编号列表（1. 2. 3.）列出重要的发现和洞察
+3. 研究结论：用段落形式说明基于研究得出的结论
+4. 参考来源：用编号列表列出信息来源（如果有）
+
+注意：
+- 不要使用 JSON 格式
+- 不要使用 Markdown 标记（如 ###、**、- 等）
+- 使用简洁、清晰的语言
+- 直接输出内容，像在和用户对话一样自然
 """
-    
+
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         处理研究任务
-        
+
         Args:
             state: 当前状态
-            
+
         Returns:
             Dict[str, Any]: 研究结果
         """
         try:
             app_logger.info(f"{self.name} 开始研究任务")
-            
-            # 获取任务信息
+
+            # 获取任务信息 - 兼容字典和字符串格式
             task = state.get("task", {})
-            task_description = task.get("description", "")
-            research_topic = task.get("topic", task_description)
-            
+            if isinstance(task, dict):
+                task_description = task.get("description", "")
+                research_topic = task.get("topic", task_description)
+            elif isinstance(task, str):
+                task_description = task
+                research_topic = task
+            else:
+                task_description = str(task)
+                research_topic = str(task)
+
             # 构建研究提示
             research_prompt = f"""
 请对以下主题进行深入研究:
@@ -120,43 +126,30 @@ class ResearcherAgent(BaseAgent):
 3. 结论: 基于研究的结论
 4. 参考文献: 信息来源
 """
-            
+
             # 调用 LLM 进行研究
             messages = [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(content=research_prompt)
             ]
-            
+
             response = await self.llm.ainvoke(messages)
-            
-            # 解析结果
-            import json
-            try:
-                research_result = json.loads(response.content)
-            except json.JSONDecodeError:
-                research_result = {
-                    "topic": research_topic,
-                    "summary": response.content,
-                    "raw_output": True
-                }
-            
+
+            # 直接使用文本输出，不再解析 JSON
             # 构建返回结果
             result = {
                 "agent_id": self.agent_id,
                 "agent_type": self.agent_type.value,
                 "agent_name": self.name,
-                "topic": research_result.get("topic", research_topic),
-                "summary": research_result.get("summary", ""),
-                "findings": research_result.get("findings", []),
-                "conclusions": research_result.get("conclusions", []),
-                "references": research_result.get("references", []),
+                "topic": research_topic,
+                "research_output": response.content,  # 直接使用文本内容
                 "success": True,
-                "output": response.content
+                "output": response.content  # 用户友好的文本输出
             }
-            
+
             app_logger.info(f"{self.name} 研究完成")
             return result
-            
+
         except Exception as e:
             app_logger.error(f"{self.name} 研究失败: {str(e)}")
             return {
@@ -166,14 +159,14 @@ class ResearcherAgent(BaseAgent):
                 "error": str(e),
                 "success": False
             }
-    
+
     async def research_topic(self, topic: str) -> Dict[str, Any]:
         """
         研究特定主题
-        
+
         Args:
             topic: 研究主题
-            
+
         Returns:
             Dict[str, Any]: 研究结果
         """
@@ -181,9 +174,9 @@ class ResearcherAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请深入研究以下主题:\n{topic}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
-        
+
         import json
         try:
             result = json.loads(response.content)
@@ -194,14 +187,14 @@ class ResearcherAgent(BaseAgent):
                 "research": response.content,
                 "agent_id": self.agent_id
             }
-    
+
     async def generate_report(self, research_data: Dict[str, Any]) -> str:
         """
         生成研究报告
-        
+
         Args:
             research_data: 研究数据
-            
+
         Returns:
             str: 研究报告
         """
@@ -209,7 +202,7 @@ class ResearcherAgent(BaseAgent):
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"请基于以下研究数据生成结构化报告:\n{research_data}")
         ]
-        
+
         response = await self.llm.ainvoke(messages)
         return response.content
 
