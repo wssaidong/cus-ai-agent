@@ -83,11 +83,6 @@ class ReviewerAgent(BaseAgent):
 6. 发现的问题：用编号列表（1. 2. 3.）列出存在的问题（如果有）
 7. 改进建议：用编号列表（1. 2. 3.）提供具体的改进建议（如果需要）
 
-注意：
-- 不要使用 JSON 格式
-- 不要使用 Markdown 标记（如 ###、**、- 等）
-- 使用简洁、清晰的语言
-- 直接输出内容，像在和用户对话一样自然
 """
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -154,6 +149,9 @@ class ReviewerAgent(BaseAgent):
 5. 建议: 如何改进
 """
 
+            # 记录 Prompt 日志
+            self._log_prompt(self.system_prompt, review_prompt)
+
             # 调用 LLM 进行评审
             messages = [
                 SystemMessage(content=self.system_prompt),
@@ -161,6 +159,9 @@ class ReviewerAgent(BaseAgent):
             ]
 
             response = await self.llm.ainvoke(messages)
+
+            # 记录 Response 日志
+            self._log_response(response.content)
 
             # 直接使用文本输出，不再解析 JSON
             # 从文本中判断是否通过

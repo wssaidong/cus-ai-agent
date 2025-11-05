@@ -82,11 +82,6 @@ class ResearcherAgent(BaseAgent):
 3. 研究结论：用段落形式说明基于研究得出的结论
 4. 参考来源：用编号列表列出信息来源（如果有）
 
-注意：
-- 不要使用 JSON 格式
-- 不要使用 Markdown 标记（如 ###、**、- 等）
-- 使用简洁、清晰的语言
-- 直接输出内容，像在和用户对话一样自然
 """
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -127,6 +122,9 @@ class ResearcherAgent(BaseAgent):
 4. 参考文献: 信息来源
 """
 
+            # 记录 Prompt 日志
+            self._log_prompt(self.system_prompt, research_prompt)
+
             # 调用 LLM 进行研究
             messages = [
                 SystemMessage(content=self.system_prompt),
@@ -134,6 +132,9 @@ class ResearcherAgent(BaseAgent):
             ]
 
             response = await self.llm.ainvoke(messages)
+
+            # 记录 Response 日志
+            self._log_response(response.content)
 
             # 直接使用文本输出，不再解析 JSON
             # 构建返回结果
@@ -159,50 +160,4 @@ class ResearcherAgent(BaseAgent):
                 "error": str(e),
                 "success": False
             }
-
-    async def research_topic(self, topic: str) -> Dict[str, Any]:
-        """
-        研究特定主题
-
-        Args:
-            topic: 研究主题
-
-        Returns:
-            Dict[str, Any]: 研究结果
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请深入研究以下主题:\n{topic}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-
-        import json
-        try:
-            result = json.loads(response.content)
-            return result
-        except:
-            return {
-                "topic": topic,
-                "research": response.content,
-                "agent_id": self.agent_id
-            }
-
-    async def generate_report(self, research_data: Dict[str, Any]) -> str:
-        """
-        生成研究报告
-
-        Args:
-            research_data: 研究数据
-
-        Returns:
-            str: 研究报告
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请基于以下研究数据生成结构化报告:\n{research_data}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-        return response.content
 

@@ -89,6 +89,18 @@ class ExecutorAgent(BaseAgent):
 - 完整性: 确保任务完整执行
 - 可靠性: 处理可能的错误
 
+工具使用策略:
+1. 优先使用知识库搜索工具查找相关信息
+2. 仔细评估工具返回的结果是否与任务相关
+3. 如果知识库搜索结果不相关或为空:
+   - 明确告知用户"知识库中暂无相关信息"
+   - 基于你的通用知识提供有价值的回答
+   - 说明回答来源于通用知识而非知识库
+4. 如果知识库有相关结果:
+   - 优先使用知识库中的信息
+   - 引用具体的来源和内容
+   - 可以结合通用知识补充说明
+
 输出格式:
 请以自然、流畅的对话方式输出执行结果。用简洁的段落和编号列表来组织内容。
 
@@ -96,13 +108,15 @@ class ExecutorAgent(BaseAgent):
 1. 执行步骤：用编号列表（1. 2. 3.）说明执行了哪些步骤
 2. 使用的工具：用编号列表列出使用的工具（如果有）
 3. 执行结果：用段落形式详细描述执行的结果和输出
-4. 状态说明：用一句话说明执行是否成功，如有问题请说明
+4. 信息来源：说明信息来自知识库还是通用知识
+5. 状态说明：用一句话说明执行是否成功，如有问题请说明
 
 注意：
 - 不要使用 JSON 格式
 - 不要使用 Markdown 标记（如 ###、**、- 等）
 - 使用简洁、清晰的语言
 - 直接输出内容，像在和用户对话一样自然
+- 即使知识库没有相关信息，也要尽力提供有价值的回答
 """
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -149,6 +163,9 @@ class ExecutorAgent(BaseAgent):
 3. 记录执行过程和结果
 4. 处理可能的错误
 """
+
+            # 记录 Prompt 日志
+            self._log_prompt(self.system_prompt, execution_prompt)
 
             # 调用 LLM 执行任务
             messages = [
@@ -212,6 +229,9 @@ class ExecutorAgent(BaseAgent):
                 final_response = response
             else:
                 final_response = await self.llm.ainvoke(messages)
+
+            # 记录 Response 日志
+            self._log_response(final_response.content)
 
             # 直接使用文本输出，不再解析 JSON
             # 构建返回结果

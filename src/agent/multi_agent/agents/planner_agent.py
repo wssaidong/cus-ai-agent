@@ -83,11 +83,6 @@ class PlannerAgent(BaseAgent):
 3. 风险评估：用编号列表列出可能的风险和应对措施
 4. 资源需求：用编号列表列出需要的资源和工具
 
-注意：
-- 不要使用 JSON 格式
-- 不要使用 Markdown 标记（如 ###、**、- 等）
-- 使用简洁、清晰的语言
-- 直接输出内容，像在和用户对话一样自然
 """
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -138,6 +133,9 @@ class PlannerAgent(BaseAgent):
 4. 资源需求: 列出需要的资源和工具
 """
 
+            # 记录 Prompt 日志
+            self._log_prompt(self.system_prompt, planning_prompt)
+
             # 调用 LLM 进行规划
             messages = [
                 SystemMessage(content=self.system_prompt),
@@ -145,6 +143,9 @@ class PlannerAgent(BaseAgent):
             ]
 
             response = await self.llm.ainvoke(messages)
+
+            # 记录 Response 日志
+            self._log_response(response.content)
 
             # 直接使用文本输出，不再解析 JSON
             # 构建返回结果
@@ -169,52 +170,4 @@ class PlannerAgent(BaseAgent):
                 "error": str(e),
                 "success": False
             }
-
-    async def decompose_task(self, task: str) -> List[Dict[str, Any]]:
-        """
-        分解任务
-
-        Args:
-            task: 任务描述
-
-        Returns:
-            List[Dict[str, Any]]: 子任务列表
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请将以下任务分解为子任务:\n{task}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-
-        import json
-        try:
-            result = json.loads(response.content)
-            return result.get("plan", [])
-        except:
-            return []
-
-    async def assess_risks(self, plan: List[Dict[str, Any]]) -> List[str]:
-        """
-        评估风险
-
-        Args:
-            plan: 执行计划
-
-        Returns:
-            List[str]: 风险列表
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请评估以下计划的风险:\n{plan}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-
-        import json
-        try:
-            result = json.loads(response.content)
-            return result.get("risks", [])
-        except:
-            return []
 

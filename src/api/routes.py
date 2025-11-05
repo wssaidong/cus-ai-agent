@@ -193,6 +193,12 @@ async def chat_completions(request: CompletionRequest):
     - **temperature**: 温度参数（0-2）
     - **max_tokens**: 最大生成token数
     - **stream**: 是否流式输出（默认false）
+    - **use_multi_agent**: 是否使用多智能体模式（默认false）
+
+    注意：
+    - 多智能体模式下，只返回执行者(executor)的最终结果
+    - 不会返回规划者、分析者、研究者等其他智能体的中间结果
+    - 这样可以提供更简洁、直接的用户体验
     """
 
     # 如果请求流式输出，返回流式响应
@@ -255,9 +261,23 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
 
             result = await multi_agent_graph.ainvoke(initial_state, config=config)
 
-            # 提取最终结果
-            final_result = result.get("final_result", {})
-            response_content = final_result.get("summary", final_result.get("output", "抱歉，我无法生成响应。"))
+            # 只提取执行者(executor)的结果
+            agent_results = result.get("agent_results", {})
+            executor_result = None
+
+            # 查找执行者的结果
+            for agent_id, agent_result in agent_results.items():
+                if agent_result.get("agent_type") == "executor":
+                    executor_result = agent_result
+                    break
+
+            # 使用执行者的输出，如果没有则使用最终结果的汇总
+            if executor_result and executor_result.get("output"):
+                response_content = executor_result["output"]
+            else:
+                # 降级方案：使用最终结果的汇总
+                final_result = result.get("final_result", {})
+                response_content = final_result.get("summary", final_result.get("output", "抱歉，我无法生成响应。"))
 
         else:
             # 使用单智能体
@@ -375,28 +395,37 @@ async def _chat_completions_stream(request: CompletionRequest):
                 # 执行多智能体协作（流式）- 必须提供 thread_id
                 config = {"configurable": {"thread_id": session_id}}
 
-                # 流式输出多智能体执行过程
+                # 流式输出多智能体执行过程 - 只输出执行者(executor)的结果
+                executor_output = ""
                 async for event in multi_agent_graph.astream(initial_state, config=config):
                     # 提取智能体输出
                     for node_name, node_output in event.items():
                         if isinstance(node_output, dict):
-                            # 提取智能体结果
+                            # 只提取执行者(executor)的结果
                             agent_results = node_output.get("agent_results", {})
                             for agent_id, result in agent_results.items():
-                                if result.get("output"):
-                                    content = f"[{result.get('agent_name', agent_id)}]: {result['output'][:100]}...\n"
-                                    content_chunk = CompletionStreamChunk(
-                                        id=request_id,
-                                        object="chat.completion.chunk",
-                                        created=int(start_time),
-                                        model=request.model,
-                                        choices=[{
-                                            "index": 0,
-                                            "delta": {"content": content},
-                                            "finish_reason": None
-                                        }]
-                                    )
-                                    yield f"data: {content_chunk.model_dump_json()}\n\n"
+                                # 只处理执行者的输出
+                                if result.get("agent_type") == "executor" and result.get("output"):
+                                    executor_output = result["output"]
+
+                # 流式输出执行者的结果
+                if executor_output:
+                    # 将执行者的输出分块流式发送
+                    chunk_size = 50  # 每次发送50个字符
+                    for i in range(0, len(executor_output), chunk_size):
+                        chunk = executor_output[i:i + chunk_size]
+                        content_chunk = CompletionStreamChunk(
+                            id=request_id,
+                            object="chat.completion.chunk",
+                            created=int(start_time),
+                            model=request.model,
+                            choices=[{
+                                "index": 0,
+                                "delta": {"content": chunk},
+                                "finish_reason": None
+                            }]
+                        )
+                        yield f"data: {content_chunk.model_dump_json()}\n\n"
 
             else:
                 # 使用单智能体（流式输出）

@@ -1,12 +1,13 @@
 """
 分析师智能体 (AnalystAgent)
 
-职责: 信息收集、数据分析、洞察提取
+职责: 信息收集、数据分析、洞察提取、交互式需求澄清
 """
-from typing import Dict, List, Any
-from langchain_core.messages import HumanMessage, SystemMessage
+from typing import Dict, List, Any, Optional
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from ..base_agent import BaseAgent, AgentType, AgentCapability
 from src.utils import app_logger
+import json
 
 
 class AnalystAgent(BaseAgent):
@@ -58,34 +59,58 @@ class AnalystAgent(BaseAgent):
 
     def _get_default_system_prompt(self) -> str:
         """获取分析师系统提示词"""
-        return """你是一个专业的分析师智能体。
+        return """你是一个专业的分析师智能体，擅长深度分析、信息提取和洞察发现。
 
-你的职责:
-1. 深入分析用户需求和问题
-2. 收集和整理相关信息
-3. 识别关键数据和模式
-4. 提取有价值的洞察
+# 核心职责
+1. 需求理解：准确理解用户需求的本质和目标
+2. 信息收集：系统性地收集和整理相关信息
+3. 数据分析：识别关键数据、模式和趋势
+4. 洞察提取：从数据中提炼有价值的洞察和建议
 
-分析原则:
-- 全面性: 考虑问题的各个方面
-- 准确性: 基于事实和数据进行分析
-- 深度性: 深入挖掘问题本质
-- 结构化: 以清晰的结构呈现分析结果
+# 分析方法论
+## 结构化分析框架
+- 问题拆解：将复杂问题分解为可分析的子问题
+- 多维度思考：从不同角度审视问题（技术、业务、用户等）
+- 因果关系：识别问题的根本原因和影响因素
+- 优先级排序：区分关键信息和次要信息
 
-输出格式:
-请以自然、流畅的对话方式输出分析结果。用简洁的段落和编号列表来组织内容。
+## 质量标准
+- 全面性：覆盖问题的各个重要方面，不遗漏关键点
+- 准确性：基于事实和数据，避免主观臆断
+- 深度性：深入挖掘问题本质，不停留在表面
+- 可操作性：提供具体、可执行的建议
 
-包含以下内容：
-1. 需求分析：用一段话明确说明任务的核心需求和目标
-2. 关键信息：用编号列表（1. 2. 3.）列出完成任务所需的关键信息
-3. 数据洞察：用段落形式提供从现有信息中提取的洞察
-4. 建议：用编号列表（1. 2. 3.）给出下一步行动建议
+# 输出规范
+请以清晰、专业的方式组织分析结果，包含以下四个部分：
 
-注意：
-- 不要使用 JSON 格式
-- 不要使用 Markdown 标记（如 ###、**、- 等）
-- 使用简洁、清晰的语言
-- 直接输出内容，像在和用户对话一样自然
+## 1. 需求分析
+用简洁的段落说明：
+- 任务的核心需求是什么
+- 要达成的目标是什么
+- 关键约束条件有哪些
+
+## 2. 关键信息
+用编号列表列出完成任务所需的关键信息：
+1. [信息项1]：说明为什么重要
+2. [信息项2]：说明为什么重要
+3. [信息项3]：说明为什么重要
+
+## 3. 数据洞察
+用段落形式提供从现有信息中提取的洞察：
+- 发现了什么模式或趋势
+- 存在什么潜在问题或风险
+- 有什么机会或优势
+
+## 4. 行动建议
+用编号列表给出下一步行动建议：
+1. [建议1]：说明预期效果
+2. [建议2]：说明预期效果
+3. [建议3]：说明预期效果
+
+# 注意事项
+- 保持客观中立，基于事实而非假设
+- 突出重点，避免冗长的描述
+- 确保建议具体可行，而非泛泛而谈
 """
 
     async def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,18 +140,26 @@ class AnalystAgent(BaseAgent):
 
             # 构建分析提示
             analysis_prompt = f"""
-请分析以下任务:
+请对以下任务进行深度分析：
 
-任务描述: {task_description}
+【任务描述】
+{task_description}
 
-上下文信息: {task_context}
+【上下文信息】
+{task_context if task_context else "无额外上下文"}
 
-请提供:
-1. 需求分析: 明确任务的核心需求和目标
-2. 关键信息: 识别完成任务所需的关键信息
-3. 数据洞察: 从现有信息中提取洞察
-4. 建议: 提供下一步行动建议
+【分析要求】
+请按照系统提示词中的四个部分进行分析：
+1. 需求分析：明确核心需求、目标和约束条件
+2. 关键信息：列出完成任务所需的关键信息及其重要性
+3. 数据洞察：提取有价值的洞察、发现模式和潜在问题
+4. 行动建议：提供具体可行的下一步行动建议及预期效果
+
+请确保分析全面、深入且具有可操作性。
 """
+
+            # 记录 Prompt 日志
+            self._log_prompt(self.system_prompt, analysis_prompt)
 
             # 调用 LLM 进行分析
             messages = [
@@ -135,6 +168,9 @@ class AnalystAgent(BaseAgent):
             ]
 
             response = await self.llm.ainvoke(messages)
+
+            # 记录 Response 日志
+            self._log_response(response.content)
 
             # 直接使用文本输出，不再解析 JSON
             # 构建返回结果
@@ -159,50 +195,4 @@ class AnalystAgent(BaseAgent):
                 "error": str(e),
                 "success": False
             }
-
-    async def analyze_requirements(self, requirements: str) -> Dict[str, Any]:
-        """
-        分析需求
-
-        Args:
-            requirements: 需求描述
-
-        Returns:
-            Dict[str, Any]: 需求分析结果
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请分析以下需求:\n{requirements}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-
-        return {
-            "requirements": requirements,
-            "analysis": response.content,
-            "agent_id": self.agent_id
-        }
-
-    async def extract_insights(self, data: Any) -> Dict[str, Any]:
-        """
-        提取洞察
-
-        Args:
-            data: 数据
-
-        Returns:
-            Dict[str, Any]: 洞察结果
-        """
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"请从以下数据中提取洞察:\n{data}")
-        ]
-
-        response = await self.llm.ainvoke(messages)
-
-        return {
-            "data": data,
-            "insights": response.content,
-            "agent_id": self.agent_id
-        }
 
