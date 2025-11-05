@@ -1,19 +1,10 @@
 """
-专业智能体模块
+智能体模块
 
-包含各种专业智能体的实现
+包含 Planner 和 Executor 两个智能体
 """
-from .analyst_agent import AnalystAgent
-from .planner_agent import PlannerAgent
-from .executor_agent import ExecutorAgent
-from .reviewer_agent import ReviewerAgent
-from .researcher_agent import ResearcherAgent
+from src.agent.multi_agent.agents.planner import PlannerAgent
+from src.agent.multi_agent.agents.executor import ExecutorAgent
 
-__all__ = [
-    "AnalystAgent",
-    "PlannerAgent",
-    "ExecutorAgent",
-    "ReviewerAgent",
-    "ResearcherAgent",
-]
+__all__ = ["PlannerAgent", "ExecutorAgent"]
 
