@@ -10,9 +10,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from src.utils import app_logger
-from src.agent import agent_graph, AgentState
-from src.agent.nodes import create_dynamic_agent_executor
 from src.agent.memory import get_memory_manager
+from src.agent.multi_agent.chat_graph import get_chat_graph
+from src.agent.multi_agent.chat_state import create_chat_state
 from src.config import settings
 from .models import (
     ChatRequest, ChatResponse, HealthResponse,
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1", tags=["智能体"])
 @router.post("/chat", response_model=ChatResponse, summary="普通对话接口")
 async def chat(request: ChatRequest) -> ChatResponse:
     """
-    普通对话接口
+    普通对话接口（使用多智能体架构）
 
     - **message**: 用户消息内容
     - **session_id**: 会话ID（可选）
@@ -39,35 +39,34 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # 生成会话ID
         session_id = request.session_id or str(uuid.uuid4())
 
-        # 初始化状态
-        initial_state: AgentState = {
-            "messages": [HumanMessage(content=request.message)],
-            "intermediate_steps": [],
-            "tool_results": [],
-            "final_response": None,
-            "metadata": {
-                "session_id": session_id,
-                "start_time": start_time,
-            },
-            "iteration": 0,
-            "is_finished": False,
-        }
+        # 使用多智能体架构
+        chat_graph = get_chat_graph()
+        initial_state = create_chat_state(
+            messages=[HumanMessage(content=request.message)],
+            session_id=session_id,
+        )
 
-        # 执行智能体 - 传递 thread_id 配置以支持 checkpointer
         config = {"configurable": {"thread_id": session_id}}
-        result = agent_graph.invoke(initial_state, config=config)
+        result = await chat_graph.ainvoke(initial_state, config=config)
+
+        # 提取最终响应
+        final_response = ""
+        if result.get("messages"):
+            for msg in reversed(result["messages"]):
+                if isinstance(msg, AIMessage):
+                    final_response = msg.content
+                    break
 
         # 计算执行时间
         execution_time = time.time() - start_time
 
         # 构建响应
         response = ChatResponse(
-            response=result.get("final_response", "抱歉，我无法生成响应。"),
+            response=final_response or "抱歉，我无法生成响应。",
             session_id=session_id,
             metadata={
                 "execution_time": round(execution_time, 2),
-                "llm_calls": result.get("metadata", {}).get("llm_calls", 0),
-                "tool_calls": len(result.get("intermediate_steps", [])),
+                "architecture": "multi_agent",
             }
         )
 
@@ -81,7 +80,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @router.post("/chat/stream", summary="流式对话接口")
 async def chat_stream(request: ChatRequest):
     """
-    流式对话接口（Server-Sent Events）
+    流式对话接口（Server-Sent Events，使用多智能体架构）
 
     - **message**: 用户消息内容
     - **session_id**: 会话ID（可选）
@@ -99,28 +98,25 @@ async def chat_stream(request: ChatRequest):
             # 发送开始事件
             yield f"data: {{'type': 'start', 'session_id': '{session_id}'}}\n\n"
 
-            # 初始化状态
-            initial_state: AgentState = {
-                "messages": [HumanMessage(content=request.message)],
-                "intermediate_steps": [],
-                "tool_results": [],
-                "final_response": None,
-                "metadata": {
-                    "session_id": session_id,
-                    "start_time": start_time,
-                },
-                "iteration": 0,
-                "is_finished": False,
-            }
+            # 使用多智能体架构
+            chat_graph = get_chat_graph()
+            initial_state = create_chat_state(
+                messages=[HumanMessage(content=request.message)],
+                session_id=session_id,
+            )
 
-            # 流式执行智能体 - 传递 thread_id 配置以支持 checkpointer
             config = {"configurable": {"thread_id": session_id}}
-            async for event in agent_graph.astream(initial_state, config=config):
-                # 发送中间事件
-                if "llm" in event:
-                    node_output = event["llm"]
-                    if node_output.get("final_response"):
-                        yield f"data: {{'type': 'token', 'content': '{node_output['final_response']}'}}\n\n"
+
+            # 流式执行
+            async for event in chat_graph.astream(initial_state, config=config):
+                # 只发送 executor 节点的输出
+                if "executor" in event:
+                    node_output = event["executor"]
+                    if node_output.get("messages"):
+                        for msg in node_output["messages"]:
+                            if isinstance(msg, AIMessage):
+                                content = msg.content.replace("'", "\\'")
+                                yield f"data: {{'type': 'token', 'content': '{content}'}}\n\n"
 
             # 计算执行时间
             execution_time = time.time() - start_time
@@ -130,7 +126,8 @@ async def chat_stream(request: ChatRequest):
 
         except Exception as e:
             app_logger.error(f"流式聊天请求失败: {str(e)}")
-            yield f"data: {{'type': 'error', 'message': '{str(e)}'}}\n\n"
+            error_msg = str(e).replace("'", "\\'")
+            yield f"data: {{'type': 'error', 'message': '{error_msg}'}}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -182,7 +179,7 @@ def _estimate_tokens(text: str) -> int:
 @router.post("/chat/completions", summary="OpenAI兼容的Completions接口")
 async def chat_completions(request: CompletionRequest):
     """
-    OpenAI兼容的Chat Completions接口
+    OpenAI兼容的Chat Completions接口（使用多智能体架构）
 
     支持标准的OpenAI API格式，可以直接替换OpenAI API使用
     支持流式和非流式输出（通过stream参数控制）
@@ -192,12 +189,11 @@ async def chat_completions(request: CompletionRequest):
     - **temperature**: 温度参数（0-2）
     - **max_tokens**: 最大生成token数
     - **stream**: 是否流式输出（默认false）
-    - **use_multi_agent**: 是否使用多智能体模式（默认false）
 
     注意：
-    - 多智能体模式下，只返回执行者(executor)的最终结果
-    - 不会返回规划者、分析者、研究者等其他智能体的中间结果
-    - 这样可以提供更简洁、直接的用户体验
+    - 使用 Planner + Executor 多智能体架构
+    - 只返回执行者(executor)的最终结果
+    - 提供简洁、直接的用户体验
     """
 
     # 如果请求流式输出，返回流式响应
@@ -208,7 +204,7 @@ async def chat_completions(request: CompletionRequest):
 
 
 async def _chat_completions_normal(request: CompletionRequest) -> CompletionResponse:
-    """非流式Completions响应 - 使用新的 Planner + Executor 架构"""
+    """非流式Completions响应 - 使用多智能体架构"""
     try:
         start_time = time.time()
         request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
@@ -216,50 +212,31 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
         # 提取用户消息
         input_text = "\n".join([msg.content for msg in request.messages if msg.role == "user"])
 
-        # 判断是否使用多智能体
-        if request.use_multi_agent:
-            # 使用新的 Planner + Executor 架构
-            from src.agent.multi_agent.chat_graph import get_chat_graph
-            from src.agent.multi_agent.chat_state import create_chat_state
-            from langchain_core.messages import HumanMessage
+        # 生成 session_id (使用 user 参数或生成新的)
+        session_id = request.user or f"session-{request_id}"
 
-            # 生成 session_id (使用 user 参数或生成新的)
-            session_id = request.user or f"session-{request_id}"
+        # 创建初始状态（只包含当前用户消息，历史消息由 checkpointer 自动恢复）
+        initial_state = create_chat_state(
+            messages=[HumanMessage(content=input_text)],
+            session_id=session_id,
+        )
 
-            # 创建初始状态（只包含当前用户消息，历史消息由 checkpointer 自动恢复）
-            initial_state = create_chat_state(
-                messages=[HumanMessage(content=input_text)],
-                session_id=session_id,
-            )
+        # 配置 LangGraph (提供 thread_id 以启用记忆)
+        config = {"configurable": {"thread_id": session_id}}
 
-            # 配置 LangGraph (提供 thread_id 以启用记忆)
-            config = {"configurable": {"thread_id": session_id}}
+        # 获取聊天图并执行（checkpointer 会自动处理历史消息）
+        chat_graph = get_chat_graph()
+        result = await chat_graph.ainvoke(initial_state, config=config)
 
-            # 获取聊天图并执行（checkpointer 会自动处理历史消息）
-            chat_graph = get_chat_graph()
-            result = await chat_graph.ainvoke(initial_state, config=config)
+        # 提取最后一条 AI 消息作为响应
+        response_content = ""
+        for msg in reversed(result.get("messages", [])):
+            if isinstance(msg, AIMessage):
+                response_content = msg.content
+                break
 
-            # 提取最后一条 AI 消息作为响应
-            response_content = ""
-            for msg in reversed(result.get("messages", [])):
-                if isinstance(msg, AIMessage):
-                    response_content = msg.content
-                    break
-
-            if not response_content:
-                response_content = "抱歉，我无法生成响应。"
-
-        else:
-            # 使用单智能体
-            agent_executor = create_dynamic_agent_executor(
-                model=request.model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens
-            )
-
-            # 调用智能体
-            result = await agent_executor.ainvoke({"input": input_text})
-            response_content = result.get("output", "抱歉，我无法生成响应。")
+        if not response_content:
+            response_content = "抱歉，我无法生成响应。"
 
         # 计算token使用（简单估算）
         prompt_text = "\n".join([msg.content for msg in request.messages])
@@ -296,7 +273,7 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
 
 
 async def _chat_completions_stream(request: CompletionRequest):
-    """流式Completions响应 - 使用智能体或多智能体（流式输出）"""
+    """流式Completions响应 - 使用多智能体架构"""
 
     async def generate() -> AsyncIterator[str]:
         """生成流式响应"""
@@ -321,86 +298,48 @@ async def _chat_completions_stream(request: CompletionRequest):
             )
             yield f"data: {start_chunk.model_dump_json()}\n\n"
 
-            # 判断是否使用多智能体
-            if request.use_multi_agent:
-                # 使用新的 Planner + Executor 架构（流式输出）
-                from src.agent.multi_agent.chat_graph import get_chat_graph
-                from src.agent.multi_agent.chat_state import create_chat_state
-                from langchain_core.messages import HumanMessage, AIMessage
+            # 生成 session_id (使用 user 参数或生成新的)
+            session_id = request.user or f"session-{request_id}"
 
-                # 生成 session_id (使用 user 参数或生成新的)
-                session_id = request.user or f"session-{request_id}"
+            # 创建初始状态
+            initial_state = create_chat_state(
+                messages=[HumanMessage(content=input_text)],
+                session_id=session_id,
+            )
 
-                # 创建初始状态
-                initial_state = create_chat_state(
-                    messages=[HumanMessage(content=input_text)],
-                    session_id=session_id,
-                )
+            # 执行聊天图（流式）
+            config = {"configurable": {"thread_id": session_id}}
+            chat_graph = get_chat_graph()
 
-                # 执行聊天图（流式）
-                config = {"configurable": {"thread_id": session_id}}
-                chat_graph = get_chat_graph()
+            # 流式输出执行过程
+            last_content = ""
+            async for event in chat_graph.astream(initial_state, config=config):
+                # 提取 AI 消息
+                for node_output in event.values():
+                    if isinstance(node_output, dict):
+                        messages = node_output.get("messages", [])
+                        # 获取最后一条 AI 消息
+                        for msg in reversed(messages):
+                            if isinstance(msg, AIMessage) and msg.content:
+                                # 只发送新增的内容
+                                if msg.content != last_content:
+                                    new_content = msg.content[len(last_content):]
+                                    last_content = msg.content
 
-                # 流式输出执行过程
-                last_content = ""
-                async for event in chat_graph.astream(initial_state, config=config):
-                    # 提取 AI 消息
-                    for node_output in event.values():
-                        if isinstance(node_output, dict):
-                            messages = node_output.get("messages", [])
-                            # 获取最后一条 AI 消息
-                            for msg in reversed(messages):
-                                if isinstance(msg, AIMessage) and msg.content:
-                                    # 只发送新增的内容
-                                    if msg.content != last_content:
-                                        new_content = msg.content[len(last_content):]
-                                        last_content = msg.content
-
-                                        # 发送新增内容
-                                        content_chunk = CompletionStreamChunk(
-                                            id=request_id,
-                                            object="chat.completion.chunk",
-                                            created=int(start_time),
-                                            model=request.model,
-                                            choices=[{
-                                                "index": 0,
-                                                "delta": {"content": new_content},
-                                                "finish_reason": None
-                                            }]
-                                        )
-                                        yield f"data: {content_chunk.model_dump_json()}\n\n"
-                                    break
-
-            else:
-                # 使用单智能体（流式输出）
-                agent_executor = create_dynamic_agent_executor(
-                    model=request.model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens
-                )
-
-                # 流式调用智能体
-                async for event in agent_executor.astream_events(
-                    {"input": input_text},
-                    version="v1"
-                ):
-                    # 捕获 LLM 的流式输出
-                    if event["event"] == "on_chat_model_stream":
-                        content = event["data"]["chunk"].content
-                        if content:
-                            # 发送内容块
-                            content_chunk = CompletionStreamChunk(
-                                id=request_id,
-                                object="chat.completion.chunk",
-                                created=int(start_time),
-                                model=request.model,
-                                choices=[{
-                                    "index": 0,
-                                    "delta": {"content": content},
-                                    "finish_reason": None
-                                }]
-                            )
-                            yield f"data: {content_chunk.model_dump_json()}\n\n"
+                                    # 发送新增内容
+                                    content_chunk = CompletionStreamChunk(
+                                        id=request_id,
+                                        object="chat.completion.chunk",
+                                        created=int(start_time),
+                                        model=request.model,
+                                        choices=[{
+                                            "index": 0,
+                                            "delta": {"content": new_content},
+                                            "finish_reason": None
+                                        }]
+                                    )
+                                    yield f"data: {content_chunk.model_dump_json()}\n\n"
+                                break
 
             # 发送结束块
             end_chunk = CompletionStreamChunk(

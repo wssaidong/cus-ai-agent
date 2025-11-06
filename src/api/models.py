@@ -52,11 +52,6 @@ class HealthResponse(BaseModel):
     timestamp: str = Field(..., description="时间戳")
 
 
-class ErrorResponse(BaseModel):
-    """错误响应模型"""
-    error: str = Field(..., description="错误信息")
-    detail: Optional[str] = Field(None, description="详细信息")
-    code: Optional[str] = Field(None, description="错误代码")
 
 
 # ==================== OpenAI 兼容模型 ====================
@@ -70,7 +65,7 @@ class Message(BaseModel):
 
 
 class CompletionRequest(BaseModel):
-    """Completions请求模型（OpenAI兼容）"""
+    """Completions请求模型（OpenAI兼容，使用多智能体架构）"""
     model: str = Field(default="gpt-4-turbo-preview", description="模型名称")
     messages: List[Message] = Field(..., description="消息列表", min_length=1)
     temperature: Optional[float] = Field(default=0.7, ge=0, le=2, description="温度参数")
@@ -82,15 +77,6 @@ class CompletionRequest(BaseModel):
     presence_penalty: Optional[float] = Field(default=0, ge=-2, le=2, description="存在惩罚")
     frequency_penalty: Optional[float] = Field(default=0, ge=-2, le=2, description="频率惩罚")
     user: Optional[str] = Field(None, description="用户标识")
-
-    # 多智能体相关参数
-    use_multi_agent: Optional[bool] = Field(default=True, description="是否使用多智能体系统")
-    coordination_mode: Optional[Literal["sequential", "parallel", "hierarchical", "feedback"]] = Field(
-        default="sequential",
-        description="多智能体协作模式: sequential(顺序)/parallel(并行)/hierarchical(层级)/feedback(反馈)"
-    )
-    max_iterations: Optional[int] = Field(default=10, ge=1, le=50, description="最大迭代次数")
-    max_feedback_rounds: Optional[int] = Field(default=3, ge=1, le=10, description="最大反馈轮次(仅feedback模式)")
 
     class Config:
         json_schema_extra = {
