@@ -1,12 +1,15 @@
 """
-多智能体协作图
+多智能体协作图 - Supervisor 模式
 
-Planner 和 Executor 通过 LangGraph 进行协作
+Supervisor 协调多个专业化的 Worker Agents 完成任务
 """
 from typing import Literal
 from langgraph.graph import StateGraph, END
 from src.agent.multi_agent.chat_state import ChatState
-from src.agent.multi_agent.agents import PlannerAgent, ExecutorAgent
+from src.agent.multi_agent.agents.supervisor import SupervisorAgent
+from src.agent.multi_agent.agents.search_agent import SearchAgent
+from src.agent.multi_agent.agents.write_agent import WriteAgent
+from src.agent.multi_agent.agents.analysis_agent import AnalysisAgent
 from src.agent.memory import get_memory_saver
 from src.tools import get_available_tools
 from src.utils import app_logger
@@ -14,54 +17,73 @@ from src.utils import app_logger
 
 def create_chat_graph():
     """
-    创建聊天图
+    创建聊天图 - Supervisor 模式
 
     工作流程:
-    1. START -> planner: 规划者分析需求，决定下一步行动
-    2. planner -> router: 路由决策
-       - next_action == "execute" -> executor: 调用执行者
-       - next_action == "respond" -> responder: 直接回答
-       - next_action == "finish" -> END: 结束
-    3. executor -> planner: 执行完成后返回规划者（可能需要多轮）
+    1. START -> supervisor: Supervisor 分析任务，决定调用哪个 Worker
+    2. supervisor -> router: 路由决策
+       - next_agent == "search_agent" -> search_agent: 搜索智能体
+       - next_agent == "write_agent" -> write_agent: 写入智能体
+       - next_agent == "analysis_agent" -> analysis_agent: 分析智能体
+       - next_agent == "respond" -> responder: 直接回答
+       - next_agent == "finish" -> END: 结束
+    3. worker_agents -> supervisor: Worker 完成后返回 Supervisor（可能需要多轮）
     4. responder -> END: 直接回答后结束
+
+    Supervisor 模式优势:
+    - 中央协调：Supervisor 统一管理所有 Worker
+    - 职责分离：每个 Worker 专注于特定领域
+    - 易于扩展：添加新 Worker 无需修改现有逻辑
+    - 灵活调度：根据任务类型动态选择最合适的 Worker
 
     Returns:
         编译后的图
     """
-    app_logger.info("创建新的聊天图...")
+    app_logger.info("创建 Supervisor 模式聊天图...")
 
     # 获取工具（包含 MCP 工具）
     tools = get_available_tools(include_mcp=True)
     app_logger.info(f"加载了 {len(tools)} 个工具（包含 MCP 工具）")
 
-    # 创建智能体
-    planner = PlannerAgent()
-    executor = ExecutorAgent(tools=tools)
+    # 创建 Worker Agents
+    search_agent = SearchAgent(tools=tools)
+    write_agent = WriteAgent(tools=tools)
+    analysis_agent = AnalysisAgent(tools=tools)
+
+    # 创建 Supervisor
+    worker_names = ["search_agent", "write_agent", "analysis_agent"]
+    supervisor = SupervisorAgent(worker_names=worker_names)
 
     # 创建图
     workflow = StateGraph(ChatState)
 
     # 添加节点
-    workflow.add_node("planner", planner.plan)
-    workflow.add_node("executor", executor.execute)
+    workflow.add_node("supervisor", supervisor.supervise)
+    workflow.add_node("search_agent", search_agent.execute)
+    workflow.add_node("write_agent", write_agent.execute)
+    workflow.add_node("analysis_agent", analysis_agent.execute)
     workflow.add_node("responder", _create_responder())
 
     # 设置入口点
-    workflow.set_entry_point("planner")
+    workflow.set_entry_point("supervisor")
 
-    # 添加条件边：从 planner 路由到不同节点
+    # 添加条件边：从 supervisor 路由到不同节点
     workflow.add_conditional_edges(
-        "planner",
-        _route_after_planning,
+        "supervisor",
+        _route_after_supervision,
         {
-            "execute": "executor",
+            "search_agent": "search_agent",
+            "write_agent": "write_agent",
+            "analysis_agent": "analysis_agent",
             "respond": "responder",
             "finish": END,
         }
     )
 
-    # executor 执行完成后返回 planner（可能需要多轮）
-    workflow.add_edge("executor", "planner")
+    # Worker Agents 执行完成后返回 supervisor（可能需要多轮）
+    workflow.add_edge("search_agent", "supervisor")
+    workflow.add_edge("write_agent", "supervisor")
+    workflow.add_edge("analysis_agent", "supervisor")
 
     # responder 直接回答后结束
     workflow.add_edge("responder", END)
@@ -70,14 +92,15 @@ def create_chat_graph():
     memory_saver = get_memory_saver()
     graph = workflow.compile(checkpointer=memory_saver)
 
-    app_logger.info("聊天图创建完成")
+    app_logger.info("Supervisor 模式聊天图创建完成")
+    app_logger.info(f"Supervisor 管理 {len(worker_names)} 个 Worker Agents: {', '.join(worker_names)}")
 
     return graph
 
 
-def _route_after_planning(state: ChatState) -> Literal["execute", "respond", "finish"]:
+def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write_agent", "analysis_agent", "respond", "finish"]:
     """
-    规划后的路由决策
+    Supervisor 决策后的路由
 
     Args:
         state: 当前状态
@@ -85,35 +108,36 @@ def _route_after_planning(state: ChatState) -> Literal["execute", "respond", "fi
     Returns:
         下一个节点名称
     """
-    next_action = state.get("next_action", "respond")
+    next_agent = state.get("next_agent", "respond")
 
-    app_logger.info(f"[Router] 路由决策: {next_action}")
+    app_logger.info(f"[Router] Supervisor 路由决策: {next_agent}")
 
-    if next_action == "execute":
-        return "execute"
-    elif next_action == "finish":
-        return "finish"
-    else:
+    # 验证 next_agent 是否有效
+    valid_agents = ["search_agent", "write_agent", "analysis_agent", "respond", "finish"]
+    if next_agent not in valid_agents:
+        app_logger.warning(f"[Router] 无效的 next_agent: {next_agent}，默认使用 respond")
         return "respond"
+
+    return next_agent
 
 
 def _create_responder():
     """
     创建响应者节点
 
-    用于直接回答用户（不需要调用执行者）
+    用于直接回答用户（不需要调用 Worker Agent）
     """
     async def respond(state: ChatState):
         """直接回答"""
         from langchain_core.messages import AIMessage
 
-        instruction = state.get("execution_instruction", "")
+        task_instruction = state.get("task_instruction", "")
 
-        app_logger.info(f"[Responder] 直接回答: {instruction[:100]}...")
+        app_logger.info(f"[Responder] 直接回答: {task_instruction[:100]}...")
 
         # 将回答添加到消息历史
         return {
-            "messages": [AIMessage(content=instruction)],
+            "messages": [AIMessage(content=task_instruction)],
             "is_finished": True,
         }
 

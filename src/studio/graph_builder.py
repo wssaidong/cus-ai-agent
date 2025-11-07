@@ -2,7 +2,7 @@
 LangGraph Studio 专用 Graph 构建器 - 多智能体架构
 
 此模块为 LangGraph Studio UI 提供可视化和调试支持。
-使用新的 Planner + Executor 多智能体架构。
+使用 Supervisor 模式多智能体架构。
 """
 from src.utils import app_logger
 from src.agent.multi_agent.chat_graph import get_chat_graph
@@ -13,7 +13,7 @@ def create_studio_graph():
     创建支持 LangGraph Studio 的多智能体图
 
     特性:
-    - 使用 Planner + Executor 架构
+    - 使用 Supervisor 模式架构
     - 集成 InMemorySaver 用于本地开发调试
     - 支持 Studio UI 可视化和调试
     - 支持状态回溯和检查
