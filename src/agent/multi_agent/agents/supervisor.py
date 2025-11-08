@@ -59,6 +59,7 @@ class SupervisorAgent:
             max_tokens=settings.max_tokens,
             openai_api_key=settings.openai_api_key,
             openai_api_base=settings.openai_api_base,
+            streaming=True,  # 启用流式输出
             model_kwargs={
                 "response_format": {"type": "json_object"}  # 强制 JSON 输出
             }
@@ -619,7 +620,7 @@ class SupervisorAgent:
         app_logger.info(f"[{self.name}] 开始分析任务...")
 
         # 获取消息历史
-        messages = state["messages"]
+        messages = state.get("messages", [])
 
         # 构建提示
         prompt_messages = [
@@ -627,8 +628,14 @@ class SupervisorAgent:
         ]
 
         # 添加对话历史（最近10条）
+        # 过滤掉空消息，避免 "content len should not be 0" 错误
         recent_messages = messages[-10:] if len(messages) > 10 else messages
-        prompt_messages.extend(recent_messages)
+        for msg in recent_messages:
+            # 检查消息内容是否为空
+            if hasattr(msg, 'content') and msg.content and msg.content.strip():
+                prompt_messages.append(msg)
+            else:
+                app_logger.warning(f"[{self.name}] 跳过空消息: {type(msg).__name__}")
 
         # 记录提示
         self._log_prompt(prompt_messages)

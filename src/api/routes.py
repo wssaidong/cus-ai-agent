@@ -348,35 +348,45 @@ async def _chat_completions_stream(request: CompletionRequest):
             config = {"configurable": {"thread_id": session_id}}
             chat_graph = get_chat_graph()
 
-            # 流式输出执行过程
-            last_content = ""
-            async for event in chat_graph.astream(initial_state, config=config):
-                # 提取 AI 消息
-                for node_output in event.values():
-                    if isinstance(node_output, dict):
-                        messages = node_output.get("messages", [])
-                        # 获取最后一条 AI 消息
-                        for msg in reversed(messages):
-                            if isinstance(msg, AIMessage) and msg.content:
-                                # 只发送新增的内容
-                                if msg.content != last_content:
-                                    new_content = msg.content[len(last_content):]
-                                    last_content = msg.content
+            # 使用 astream_events 获取真正的流式输出
+            # 这样可以捕获 LLM 的 token 级别的流式输出
 
-                                    # 发送新增内容
-                                    content_chunk = CompletionStreamChunk(
-                                        id=request_id,
-                                        object="chat.completion.chunk",
-                                        created=int(start_time),
-                                        model=request.model,
-                                        choices=[{
-                                            "index": 0,
-                                            "delta": {"content": new_content},
-                                            "finish_reason": None
-                                        }]
-                                    )
-                                    yield f"data: {content_chunk.model_dump_json()}\n\n"
-                                break
+            # 用于跟踪是否在 Supervisor 节点中
+            current_node = None
+
+            async for event in chat_graph.astream_events(initial_state, config=config, version="v2"):
+                kind = event.get("event")
+
+                # 跟踪当前节点
+                if kind == "on_chain_start":
+                    metadata = event.get("metadata", {})
+                    langgraph_node = metadata.get("langgraph_node", "")
+                    if langgraph_node:
+                        current_node = langgraph_node
+                        app_logger.debug(f"[Stream] 进入节点: {current_node}")
+
+                # 捕获 LLM 的流式输出 token
+                if kind == "on_chat_model_stream":
+                    # 只输出非 Supervisor 节点的内容
+                    # Supervisor 节点输出的是 JSON 决策，不应该返回给用户
+                    if current_node and current_node != "supervisor":
+                        content = event.get("data", {}).get("chunk", {})
+
+                        # 提取内容
+                        if hasattr(content, "content") and content.content:
+                            # 发送内容块
+                            content_chunk = CompletionStreamChunk(
+                                id=request_id,
+                                object="chat.completion.chunk",
+                                created=int(start_time),
+                                model=request.model,
+                                choices=[{
+                                    "index": 0,
+                                    "delta": {"content": content.content},
+                                    "finish_reason": None
+                                }]
+                            )
+                            yield f"data: {content_chunk.model_dump_json()}\n\n"
 
             # 发送结束块
             end_chunk = CompletionStreamChunk(
