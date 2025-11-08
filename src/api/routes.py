@@ -353,6 +353,7 @@ async def _chat_completions_stream(request: CompletionRequest):
 
             # 用于跟踪是否在 Supervisor 节点中
             current_node = None
+            responder_content_sent = False  # 标记 Responder 内容是否已发送
 
             async for event in chat_graph.astream_events(initial_state, config=config, version="v2"):
                 kind = event.get("event")
@@ -387,6 +388,38 @@ async def _chat_completions_stream(request: CompletionRequest):
                                 }]
                             )
                             yield f"data: {content_chunk.model_dump_json()}\n\n"
+
+                # 捕获 Responder 节点的输出
+                # Responder 不调用 LLM，直接返回 AIMessage，需要特殊处理
+                if kind == "on_chain_end":
+                    metadata = event.get("metadata", {})
+                    langgraph_node = metadata.get("langgraph_node", "")
+
+                    if langgraph_node == "responder" and not responder_content_sent:
+                        # 获取 Responder 的输出
+                        output = event.get("data", {}).get("output", {})
+                        messages = output.get("messages", [])
+
+                        if messages:
+                            # 获取最后一条消息的内容
+                            last_message = messages[-1]
+                            if hasattr(last_message, "content") and last_message.content:
+                                app_logger.info(f"[Stream] Responder 输出: {last_message.content[:100]}...")
+
+                                # 将 Responder 的内容作为流式输出发送
+                                content_chunk = CompletionStreamChunk(
+                                    id=request_id,
+                                    object="chat.completion.chunk",
+                                    created=int(start_time),
+                                    model=request.model,
+                                    choices=[{
+                                        "index": 0,
+                                        "delta": {"content": last_message.content},
+                                        "finish_reason": None
+                                    }]
+                                )
+                                yield f"data: {content_chunk.model_dump_json()}\n\n"
+                                responder_content_sent = True
 
             # 发送结束块
             end_chunk = CompletionStreamChunk(
