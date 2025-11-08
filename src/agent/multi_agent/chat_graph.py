@@ -11,6 +11,7 @@ from src.agent.multi_agent.agents.search_agent import SearchAgent
 from src.agent.multi_agent.agents.write_agent import WriteAgent
 from src.agent.multi_agent.agents.analysis_agent import AnalysisAgent
 from src.agent.multi_agent.agents.execution_agent import ExecutionAgent
+from src.agent.multi_agent.agents.quality_agent import QualityAgent
 from src.agent.memory import get_memory_saver
 from src.tools import get_available_tools
 from src.utils import app_logger
@@ -52,6 +53,7 @@ def create_chat_graph():
     write_agent = WriteAgent(tools=tools)
     analysis_agent = AnalysisAgent(tools=tools)
     execution_agent = ExecutionAgent(tools=tools)
+    quality_agent = QualityAgent()  # 质量优化智能体不需要工具
 
     # 收集每个 Worker 的工具信息
     worker_tools = {
@@ -59,6 +61,7 @@ def create_chat_graph():
         "write_agent": write_agent.tools,
         "analysis_agent": analysis_agent.tools,
         "execution_agent": execution_agent.tools,
+        "quality_agent": [],  # 质量智能体不使用工具
     }
 
     app_logger.info("Worker 工具分配:")
@@ -66,7 +69,7 @@ def create_chat_graph():
         app_logger.info(f"  - {worker_name}: {len(worker_tool_list)} 个工具")
 
     # 创建 Supervisor（传递工具信息）
-    worker_names = ["search_agent", "write_agent", "analysis_agent", "execution_agent"]
+    worker_names = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent"]
     supervisor = SupervisorAgent(
         worker_names=worker_names,
         worker_tools=worker_tools  # 传递工具信息
@@ -81,6 +84,7 @@ def create_chat_graph():
     workflow.add_node("write_agent", write_agent.execute)
     workflow.add_node("analysis_agent", analysis_agent.execute)
     workflow.add_node("execution_agent", execution_agent.execute)
+    workflow.add_node("quality_agent", quality_agent)
     workflow.add_node("responder", _create_responder())
 
     # 设置入口点
@@ -95,6 +99,7 @@ def create_chat_graph():
             "write_agent": "write_agent",
             "analysis_agent": "analysis_agent",
             "execution_agent": "execution_agent",
+            "quality_agent": "quality_agent",
             "respond": "responder",
             "finish": END,
         }
@@ -106,6 +111,7 @@ def create_chat_graph():
     workflow.add_edge("write_agent", END)
     workflow.add_edge("analysis_agent", END)
     workflow.add_edge("execution_agent", END)
+    workflow.add_edge("quality_agent", END)
 
     # responder 直接回答后结束
     workflow.add_edge("responder", END)
@@ -120,7 +126,7 @@ def create_chat_graph():
     return graph
 
 
-def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write_agent", "analysis_agent", "execution_agent", "respond", "finish"]:
+def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent", "respond", "finish"]:
     """
     Supervisor 决策后的路由
 
@@ -135,7 +141,7 @@ def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write
     app_logger.info(f"[Router] Supervisor 路由决策: {next_agent}")
 
     # 验证 next_agent 是否有效
-    valid_agents = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "respond", "finish"]
+    valid_agents = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent", "respond", "finish"]
     if next_agent not in valid_agents:
         app_logger.warning(f"[Router] 无效的 next_agent: {next_agent}，默认使用 respond")
         return "respond"

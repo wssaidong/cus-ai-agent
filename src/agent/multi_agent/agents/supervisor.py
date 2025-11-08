@@ -70,6 +70,7 @@ class SupervisorAgent:
             "write_agent",       # 写入智能体 - 负责知识库写入
             "analysis_agent",    # 分析智能体 - 负责数据分析和推理
             "execution_agent",   # 执行智能体 - 负责调用 MCP 工具执行操作
+            "quality_agent",     # 质量优化智能体 - 负责评估和优化回答质量
         ]
 
         # Worker 工具映射
@@ -258,6 +259,7 @@ class SupervisorAgent:
             "write_agent": "负责写入、更新、删除知识库内容",
             "analysis_agent": "负责数据分析、推理、计算等复杂任务",
             "execution_agent": "负责调用 MCP 工具执行各种操作（日志查询、消息发送、网络测试、数据库查询等）",
+            "quality_agent": "负责评估和优化智能体回答的质量（准确性、相关性、完整性、清晰度、有用性）",
         }
 
         # 如果有预定义描述，使用它
@@ -303,6 +305,11 @@ class SupervisorAgent:
                 "查询网关的最新日志",
                 "发送一条美信消息通知团队",
                 "测试数据库连接是否正常",
+            ],
+            "quality_agent": [
+                "评估一下上一个回答的质量",
+                "优化改进刚才的回答",
+                "这个回答质量怎么样？",
             ],
         }
 
