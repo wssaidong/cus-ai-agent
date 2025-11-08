@@ -196,6 +196,23 @@ async def chat_completions(request: CompletionRequest):
     - 提供简洁、直接的用户体验
     """
 
+    # 打印请求入参
+    app_logger.info("=" * 80)
+    app_logger.info("[/chat/completions] 收到请求")
+    app_logger.info(f"  - model: {request.model}")
+    app_logger.info(f"  - stream: {request.stream}")
+    app_logger.info(f"  - temperature: {request.temperature}")
+    app_logger.info(f"  - max_tokens: {request.max_tokens}")
+    app_logger.info(f"  - session_id: {request.user if request.user else 'auto-generated'}")
+    app_logger.info(f"  - messages 数量: {len(request.messages)}")
+
+    # 打印消息详情
+    for i, msg in enumerate(request.messages):
+        content_preview = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
+        app_logger.info(f"    [{i}] {msg.role}: {content_preview}")
+
+    app_logger.info("=" * 80)
+
     # 如果请求流式输出，返回流式响应
     if request.stream:
         return await _chat_completions_stream(request)
@@ -209,15 +226,25 @@ async def _chat_completions_normal(request: CompletionRequest) -> CompletionResp
         start_time = time.time()
         request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
-        # 提取用户消息
-        input_text = "\n".join([msg.content for msg in request.messages if msg.role == "user"])
-
         # 生成 session_id (使用 user 参数或生成新的)
         session_id = request.user or f"session-{request_id}"
 
-        # 创建初始状态（只包含当前用户消息，历史消息由 checkpointer 自动恢复）
+        # 转换 OpenAI 格式的消息到 LangChain 格式
+        # 将完整的对话历史（system、user、assistant）传递给 Supervisor
+        langchain_messages = []
+        for msg in request.messages:
+            if msg.role == "system":
+                langchain_messages.append(SystemMessage(content=msg.content))
+            elif msg.role == "user":
+                langchain_messages.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                langchain_messages.append(AIMessage(content=msg.content))
+
+        app_logger.info(f"[/chat/completions] 转换了 {len(langchain_messages)} 条消息传递给 Supervisor")
+
+        # 创建初始状态（包含完整的对话历史，让 Supervisor 能看到完整上下文）
         initial_state = create_chat_state(
-            messages=[HumanMessage(content=input_text)],
+            messages=langchain_messages,
             session_id=session_id,
         )
 
@@ -281,9 +308,6 @@ async def _chat_completions_stream(request: CompletionRequest):
             start_time = time.time()
             request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
-            # 提取用户消息
-            input_text = "\n".join([msg.content for msg in request.messages if msg.role == "user"])
-
             # 发送开始块
             start_chunk = CompletionStreamChunk(
                 id=request_id,
@@ -301,9 +325,22 @@ async def _chat_completions_stream(request: CompletionRequest):
             # 生成 session_id (使用 user 参数或生成新的)
             session_id = request.user or f"session-{request_id}"
 
-            # 创建初始状态
+            # 转换 OpenAI 格式的消息到 LangChain 格式
+            # 将完整的对话历史（system、user、assistant）传递给 Supervisor
+            langchain_messages = []
+            for msg in request.messages:
+                if msg.role == "system":
+                    langchain_messages.append(SystemMessage(content=msg.content))
+                elif msg.role == "user":
+                    langchain_messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    langchain_messages.append(AIMessage(content=msg.content))
+
+            app_logger.info(f"[/chat/completions/stream] 转换了 {len(langchain_messages)} 条消息传递给 Supervisor")
+
+            # 创建初始状态（包含完整的对话历史，让 Supervisor 能看到完整上下文）
             initial_state = create_chat_state(
-                messages=[HumanMessage(content=input_text)],
+                messages=langchain_messages,
                 session_id=session_id,
             )
 

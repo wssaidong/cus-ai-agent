@@ -27,7 +27,7 @@ def create_chat_graph():
        - next_agent == "analysis_agent" -> analysis_agent: 分析智能体
        - next_agent == "respond" -> responder: 直接回答
        - next_agent == "finish" -> END: 结束
-    3. worker_agents -> supervisor: Worker 完成后返回 Supervisor（可能需要多轮）
+    3. worker_agents -> END: Worker 完成后直接结束（避免无限循环）
     4. responder -> END: 直接回答后结束
 
     Supervisor 模式优势:
@@ -80,10 +80,11 @@ def create_chat_graph():
         }
     )
 
-    # Worker Agents 执行完成后返回 supervisor（可能需要多轮）
-    workflow.add_edge("search_agent", "supervisor")
-    workflow.add_edge("write_agent", "supervisor")
-    workflow.add_edge("analysis_agent", "supervisor")
+    # Worker Agents 执行完成后直接结束（避免无限循环）
+    # 修复：之前 Worker 完成后返回 supervisor 导致不断重复调用
+    workflow.add_edge("search_agent", END)
+    workflow.add_edge("write_agent", END)
+    workflow.add_edge("analysis_agent", END)
 
     # responder 直接回答后结束
     workflow.add_edge("responder", END)
