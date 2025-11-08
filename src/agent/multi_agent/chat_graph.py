@@ -10,6 +10,7 @@ from src.agent.multi_agent.agents.supervisor import SupervisorAgent
 from src.agent.multi_agent.agents.search_agent import SearchAgent
 from src.agent.multi_agent.agents.write_agent import WriteAgent
 from src.agent.multi_agent.agents.analysis_agent import AnalysisAgent
+from src.agent.multi_agent.agents.execution_agent import ExecutionAgent
 from src.agent.memory import get_memory_saver
 from src.tools import get_available_tools
 from src.utils import app_logger
@@ -25,6 +26,7 @@ def create_chat_graph():
        - next_agent == "search_agent" -> search_agent: 搜索智能体
        - next_agent == "write_agent" -> write_agent: 写入智能体
        - next_agent == "analysis_agent" -> analysis_agent: 分析智能体
+       - next_agent == "execution_agent" -> execution_agent: 执行智能体
        - next_agent == "respond" -> responder: 直接回答
        - next_agent == "finish" -> END: 结束
     3. worker_agents -> END: Worker 完成后直接结束（避免无限循环）
@@ -49,10 +51,26 @@ def create_chat_graph():
     search_agent = SearchAgent(tools=tools)
     write_agent = WriteAgent(tools=tools)
     analysis_agent = AnalysisAgent(tools=tools)
+    execution_agent = ExecutionAgent(tools=tools)
 
-    # 创建 Supervisor
-    worker_names = ["search_agent", "write_agent", "analysis_agent"]
-    supervisor = SupervisorAgent(worker_names=worker_names)
+    # 收集每个 Worker 的工具信息
+    worker_tools = {
+        "search_agent": search_agent.tools,
+        "write_agent": write_agent.tools,
+        "analysis_agent": analysis_agent.tools,
+        "execution_agent": execution_agent.tools,
+    }
+
+    app_logger.info("Worker 工具分配:")
+    for worker_name, worker_tool_list in worker_tools.items():
+        app_logger.info(f"  - {worker_name}: {len(worker_tool_list)} 个工具")
+
+    # 创建 Supervisor（传递工具信息）
+    worker_names = ["search_agent", "write_agent", "analysis_agent", "execution_agent"]
+    supervisor = SupervisorAgent(
+        worker_names=worker_names,
+        worker_tools=worker_tools  # 传递工具信息
+    )
 
     # 创建图
     workflow = StateGraph(ChatState)
@@ -62,6 +80,7 @@ def create_chat_graph():
     workflow.add_node("search_agent", search_agent.execute)
     workflow.add_node("write_agent", write_agent.execute)
     workflow.add_node("analysis_agent", analysis_agent.execute)
+    workflow.add_node("execution_agent", execution_agent.execute)
     workflow.add_node("responder", _create_responder())
 
     # 设置入口点
@@ -75,6 +94,7 @@ def create_chat_graph():
             "search_agent": "search_agent",
             "write_agent": "write_agent",
             "analysis_agent": "analysis_agent",
+            "execution_agent": "execution_agent",
             "respond": "responder",
             "finish": END,
         }
@@ -85,6 +105,7 @@ def create_chat_graph():
     workflow.add_edge("search_agent", END)
     workflow.add_edge("write_agent", END)
     workflow.add_edge("analysis_agent", END)
+    workflow.add_edge("execution_agent", END)
 
     # responder 直接回答后结束
     workflow.add_edge("responder", END)
@@ -99,7 +120,7 @@ def create_chat_graph():
     return graph
 
 
-def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write_agent", "analysis_agent", "respond", "finish"]:
+def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write_agent", "analysis_agent", "execution_agent", "respond", "finish"]:
     """
     Supervisor 决策后的路由
 
@@ -114,7 +135,7 @@ def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write
     app_logger.info(f"[Router] Supervisor 路由决策: {next_agent}")
 
     # 验证 next_agent 是否有效
-    valid_agents = ["search_agent", "write_agent", "analysis_agent", "respond", "finish"]
+    valid_agents = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "respond", "finish"]
     if next_agent not in valid_agents:
         app_logger.warning(f"[Router] 无效的 next_agent: {next_agent}，默认使用 respond")
         return "respond"
@@ -145,11 +166,22 @@ def _create_responder():
     return respond
 
 
-# 创建全局图实例
-chat_graph = create_chat_graph()
+# 全局图实例（延迟初始化）
+_chat_graph = None
 
 
 def get_chat_graph():
-    """获取聊天图实例"""
-    return chat_graph
+    """
+    获取聊天图实例（延迟初始化）
+
+    延迟初始化确保在 MCP 工具加载后才创建图，
+    这样 ExecutionAgent 才能获取到所有 MCP 工具
+    """
+    global _chat_graph
+
+    if _chat_graph is None:
+        app_logger.info("首次调用，创建聊天图...")
+        _chat_graph = create_chat_graph()
+
+    return _chat_graph
 

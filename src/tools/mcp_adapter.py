@@ -75,6 +75,16 @@ async def create_mcp_tools_async() -> List[BaseTool]:
 
                 app_logger.info(f"从服务器 {server.name} 加载了 {len(server_tools)} 个工具")
 
+                # 增强工具描述：添加服务器的 description
+                if server.description:
+                    for tool in server_tools:
+                        # 将服务器描述添加到工具描述的开头
+                        original_desc = tool.description or ""
+                        enhanced_desc = f"[{server.description}] {original_desc}".strip()
+                        tool.description = enhanced_desc
+
+                    app_logger.info(f"为服务器 {server.name} 的工具添加了描述前缀: {server.description}")
+
                 # 应用工具过滤配置
                 if server.tools:
                     filtered_tools = []
