@@ -11,6 +11,7 @@ from .routes import router
 from .knowledge_routes import router as knowledge_router
 from .recommendation_routes import router as recommendation_router
 from .a2a_routes import router as a2a_router
+from .openai_routes import router as openai_router
 # from .multi_agent_routes import router as multi_agent_router  # 旧架构，已废弃
 
 
@@ -18,7 +19,7 @@ from .a2a_routes import router as a2a_router
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
-    description="基于LangGraph的智能体API服务，支持RAG知识库",
+    description="基于LangGraph的智能体API服务，支持RAG知识库和OpenAI兼容API",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -34,6 +35,11 @@ app.add_middleware(
 )
 
 # 注册路由
+# OpenAI 兼容 API（/v1 前缀）
+app.include_router(openai_router)
+app_logger.info("OpenAI 兼容 API 已注册到 /v1 前缀")
+
+# 原有路由（保持向后兼容）
 app.include_router(router)
 app.include_router(knowledge_router)
 app.include_router(recommendation_router)
@@ -100,6 +106,11 @@ async def root():
         "version": settings.api_version,
         "docs": "/docs",
         "health": "/api/v1/health",
+        "openai_api": {
+            "chat_completions": "/v1/chat/completions",
+            "models": "/v1/models",
+            "description": "OpenAI 兼容 API 端点"
+        }
     }
 
 

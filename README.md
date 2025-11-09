@@ -19,6 +19,8 @@
 
 - ✅ 基于LangGraph的智能体编排
 - ✅ FastAPI提供RESTful API接口
+- ✅ **OpenAI 兼容 API** - 使用标准 OpenAI SDK 即可访问
+- ✅ **多模型支持** - 通过 model 参数选择不同的智能体配置
 - ✅ 支持工具调用（计算器、文本处理、API调用等）
 - ✅ 支持RAG知识库（Milvus向量数据库）
 - ✅ **支持独立的 Embedding API 配置** - 对话和 RAG 可使用不同的 API
@@ -246,13 +248,46 @@ python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## API接口说明
 
-### 1. 健康检查
+### OpenAI 兼容 API（推荐）
+
+使用标准的 OpenAI SDK 访问智能体服务：
+
+```python
+from openai import OpenAI
+
+# 创建客户端
+client = OpenAI(
+    base_url="http://localhost:8000/v1",
+    api_key="any-value"  # API key 不验证
+)
+
+# 发送消息
+response = client.chat.completions.create(
+    model="multi-agent-default",
+    messages=[
+        {"role": "user", "content": "你好"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+**可用模型**：
+- `multi-agent-default` - 默认的多智能体配置
+- `multi-agent-supervisor` - Supervisor 模式
+- `multi-agent-with-memory` - 启用记忆的配置
+
+**详细文档**：[OpenAI 兼容 API 使用指南](docs/openai-compatible-api.md)
+
+### 原有 API（向后兼容）
+
+#### 1. 健康检查
 
 ```bash
 GET /api/v1/health
 ```
 
-### 2. 普通对话
+#### 2. 普通对话
 
 ```bash
 POST /api/v1/chat
@@ -267,7 +302,7 @@ Content-Type: application/json
 }
 ```
 
-### 3. 流式对话
+#### 3. 流式对话
 
 ```bash
 POST /api/v1/chat/stream
