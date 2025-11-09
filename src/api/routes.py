@@ -85,15 +85,18 @@ async def chat_stream(request: ChatRequest):
     - **message**: 用户消息内容
     - **session_id**: 会话ID（可选）
     - **config**: 配置参数（可选）
+
+    注意：此接口使用自定义格式，推荐使用 /v1/chat/completions 接口（OpenAI 兼容）
     """
 
     async def generate() -> AsyncIterator[str]:
         """生成流式响应"""
         try:
             start_time = time.time()
+            request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
 
             # 生成会话ID
-            session_id = request.session_id or str(uuid.uuid4())
+            session_id = request.session_id or f"session-{request_id}"
 
             # 发送开始事件
             yield f"data: {{'type': 'start', 'session_id': '{session_id}'}}\n\n"
@@ -107,16 +110,66 @@ async def chat_stream(request: ChatRequest):
 
             config = {"configurable": {"thread_id": session_id}}
 
-            # 流式执行
-            async for event in chat_graph.astream(initial_state, config=config):
-                # 只发送 executor 节点的输出
-                if "executor" in event:
-                    node_output = event["executor"]
-                    if node_output.get("messages"):
-                        for msg in node_output["messages"]:
-                            if isinstance(msg, AIMessage):
-                                content = msg.content.replace("'", "\\'")
-                                yield f"data: {{'type': 'token', 'content': '{content}'}}\n\n"
+            # 用于跟踪节点和内容
+            current_node = None
+            responder_content_sent = False
+            worker_content_sent = set()
+
+            # 使用 astream_events 获取真正的流式输出
+            async for event in chat_graph.astream_events(initial_state, config=config, version="v2"):
+                kind = event.get("event")
+
+                # 跟踪当前节点
+                if kind == "on_chain_start":
+                    metadata = event.get("metadata", {})
+                    langgraph_node = metadata.get("langgraph_node", "")
+                    if langgraph_node:
+                        current_node = langgraph_node
+
+                # 捕获 LLM 的流式输出 token
+                if kind == "on_chat_model_stream":
+                    # 只输出非 Supervisor 节点的内容
+                    if current_node and current_node != "supervisor":
+                        content = event.get("data", {}).get("chunk", {})
+
+                        # 提取内容
+                        if hasattr(content, "content") and content.content:
+                            # 标记该节点已发送内容
+                            worker_content_sent.add(current_node)
+
+                            # 发送内容
+                            content_escaped = content.content.replace("'", "\\'").replace("\n", "\\n")
+                            yield f"data: {{'type': 'token', 'content': '{content_escaped}'}}\n\n"
+
+                # 捕获节点完成事件（处理非流式节点）
+                if kind == "on_chain_end":
+                    metadata = event.get("metadata", {})
+                    langgraph_node = metadata.get("langgraph_node", "")
+
+                    # 处理 Responder 节点
+                    if langgraph_node == "responder" and not responder_content_sent:
+                        output = event.get("data", {}).get("output", {})
+                        messages = output.get("messages", [])
+
+                        if messages:
+                            last_message = messages[-1]
+                            if hasattr(last_message, "content") and last_message.content:
+                                content_escaped = last_message.content.replace("'", "\\'").replace("\n", "\\n")
+                                yield f"data: {{'type': 'token', 'content': '{content_escaped}'}}\n\n"
+                                responder_content_sent = True
+
+                    # 处理 Worker 节点（如果流式输出没有捕获到）
+                    worker_nodes = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent"]
+                    if langgraph_node in worker_nodes and langgraph_node not in worker_content_sent:
+                        output = event.get("data", {}).get("output", {})
+                        messages = output.get("messages", [])
+
+                        if messages:
+                            last_message = messages[-1]
+                            if hasattr(last_message, "content") and last_message.content:
+                                worker_content_sent.add(langgraph_node)
+                                content_escaped = last_message.content.replace("'", "\\'").replace("\n", "\\n")
+                                yield f"data: {{'type': 'token', 'content': '{content_escaped}'}}\n\n"
 
             # 计算执行时间
             execution_time = time.time() - start_time
@@ -126,8 +179,13 @@ async def chat_stream(request: ChatRequest):
 
         except Exception as e:
             app_logger.error(f"流式聊天请求失败: {str(e)}")
+            import traceback
+            app_logger.error(f"堆栈跟踪:\n{traceback.format_exc()}")
+
             error_msg = str(e).replace("'", "\\'")
             yield f"data: {{'type': 'error', 'message': '{error_msg}'}}\n\n"
+            # 确保发送结束标记
+            yield f"data: {{'type': 'end'}}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -135,6 +193,7 @@ async def chat_stream(request: ChatRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         }
     )
 
@@ -354,6 +413,9 @@ async def _chat_completions_stream(request: CompletionRequest):
             # 用于跟踪是否在 Supervisor 节点中
             current_node = None
             responder_content_sent = False  # 标记 Responder 内容是否已发送
+            supervisor_notified = False  # 标记是否已发送 Supervisor 进度提示
+            worker_nodes_notified = set()  # 记录已发送进度提示的 Worker 节点
+            worker_content_sent = set()  # 记录已发送内容的 Worker 节点（防止重复）
 
             async for event in chat_graph.astream_events(initial_state, config=config, version="v2"):
                 kind = event.get("event")
@@ -366,6 +428,41 @@ async def _chat_completions_stream(request: CompletionRequest):
                         current_node = langgraph_node
                         app_logger.debug(f"[Stream] 进入节点: {current_node}")
 
+                        # 当进入 Supervisor 节点时，发送进度提示
+                        if current_node == "supervisor" and not supervisor_notified:
+                            progress_chunk = CompletionStreamChunk(
+                                id=request_id,
+                                object="chat.completion.chunk",
+                                created=int(start_time),
+                                model=request.model,
+                                choices=[{
+                                    "index": 0,
+                                    "delta": {"content": ""},
+                                    "finish_reason": None
+                                }]
+                            )
+                            yield f"data: {progress_chunk.model_dump_json()}\n\n"
+                            supervisor_notified = True
+                            app_logger.debug(f"[Stream] 已发送 Supervisor 进度提示")
+
+                        # 当进入 Worker 节点时，发送进度提示（保持连接活跃）
+                        worker_nodes = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent"]
+                        if current_node in worker_nodes and current_node not in worker_nodes_notified:
+                            progress_chunk = CompletionStreamChunk(
+                                id=request_id,
+                                object="chat.completion.chunk",
+                                created=int(start_time),
+                                model=request.model,
+                                choices=[{
+                                    "index": 0,
+                                    "delta": {"content": ""},
+                                    "finish_reason": None
+                                }]
+                            )
+                            yield f"data: {progress_chunk.model_dump_json()}\n\n"
+                            worker_nodes_notified.add(current_node)
+                            app_logger.debug(f"[Stream] 已发送 {current_node} 进度提示")
+
                 # 捕获 LLM 的流式输出 token
                 if kind == "on_chat_model_stream":
                     # 只输出非 Supervisor 节点的内容
@@ -375,6 +472,9 @@ async def _chat_completions_stream(request: CompletionRequest):
 
                         # 提取内容
                         if hasattr(content, "content") and content.content:
+                            # 标记该节点已发送内容（防止在 on_chain_end 时重复发送）
+                            worker_content_sent.add(current_node)
+
                             # 发送内容块
                             content_chunk = CompletionStreamChunk(
                                 id=request_id,
@@ -389,12 +489,13 @@ async def _chat_completions_stream(request: CompletionRequest):
                             )
                             yield f"data: {content_chunk.model_dump_json()}\n\n"
 
-                # 捕获 Responder 节点的输出
-                # Responder 不调用 LLM，直接返回 AIMessage，需要特殊处理
+                # 捕获节点完成事件
+                # Responder 和 Worker 节点不调用 LLM 流式输出，需要在节点完成时捕获输出
                 if kind == "on_chain_end":
                     metadata = event.get("metadata", {})
                     langgraph_node = metadata.get("langgraph_node", "")
 
+                    # 处理 Responder 节点输出
                     if langgraph_node == "responder" and not responder_content_sent:
                         # 获取 Responder 的输出
                         output = event.get("data", {}).get("output", {})
@@ -421,6 +522,36 @@ async def _chat_completions_stream(request: CompletionRequest):
                                 yield f"data: {content_chunk.model_dump_json()}\n\n"
                                 responder_content_sent = True
 
+                    # 处理 Worker 节点输出（仅当 LLM 流式输出没有捕获到时）
+                    # Worker 节点可能使用 ainvoke 而非 astream，导致流式事件无法捕获
+                    worker_nodes = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent"]
+                    if langgraph_node in worker_nodes and langgraph_node not in worker_content_sent:
+                        output = event.get("data", {}).get("output", {})
+                        messages = output.get("messages", [])
+
+                        if messages:
+                            # 获取最后一条消息的内容
+                            last_message = messages[-1]
+                            if hasattr(last_message, "content") and last_message.content:
+                                app_logger.info(f"[Stream] {langgraph_node} 输出 (fallback): {last_message.content[:100]}...")
+
+                                # 标记已发送
+                                worker_content_sent.add(langgraph_node)
+
+                                # 将 Worker 的内容作为流式输出发送
+                                content_chunk = CompletionStreamChunk(
+                                    id=request_id,
+                                    object="chat.completion.chunk",
+                                    created=int(start_time),
+                                    model=request.model,
+                                    choices=[{
+                                        "index": 0,
+                                        "delta": {"content": last_message.content},
+                                        "finish_reason": None
+                                    }]
+                                )
+                                yield f"data: {content_chunk.model_dump_json()}\n\n"
+
             # 发送结束块
             end_chunk = CompletionStreamChunk(
                 id=request_id,
@@ -438,6 +569,9 @@ async def _chat_completions_stream(request: CompletionRequest):
 
         except Exception as e:
             app_logger.error(f"流式Completions请求失败: {str(e)}")
+            import traceback
+            app_logger.error(f"堆栈跟踪:\n{traceback.format_exc()}")
+
             error_chunk = {
                 "error": {
                     "message": str(e),
@@ -446,6 +580,8 @@ async def _chat_completions_stream(request: CompletionRequest):
                 }
             }
             yield f"data: {json.dumps(error_chunk)}\n\n"
+            # 确保发送 [DONE] 标记，防止客户端一直等待
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),

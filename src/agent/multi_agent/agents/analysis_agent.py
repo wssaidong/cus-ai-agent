@@ -35,7 +35,7 @@ class AnalysisAgent:
         self.name = "AnalysisAgent"
         self.llm = llm or ChatOpenAI(
             model=settings.model_name,
-            temperature=0.5,  # 中等温度，平衡创造性和准确性
+            temperature=0.3,  # 中等温度，平衡创造性和准确性
             max_tokens=settings.max_tokens,
             openai_api_key=settings.openai_api_key,
             openai_api_base=settings.openai_api_base,
