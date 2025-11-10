@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = Field(default=200, alias="RAG_CHUNK_OVERLAP")
     rag_top_k: int = Field(default=5, alias="RAG_TOP_K")
 
+    # RAG 搜索优化配置
+    rag_enable_query_optimization: bool = Field(default=True, alias="RAG_ENABLE_QUERY_OPTIMIZATION")
+    rag_enable_rerank: bool = Field(default=True, alias="RAG_ENABLE_RERANK")
+    rag_enable_quality_eval: bool = Field(default=True, alias="RAG_ENABLE_QUALITY_EVAL")
+
     # LangSmith 配置（可观测性和调试）
     langchain_tracing_v2: bool = Field(default=False, alias="LANGCHAIN_TRACING_V2")
     langchain_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGCHAIN_ENDPOINT")

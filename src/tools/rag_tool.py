@@ -19,6 +19,9 @@ except ImportError:
 from pydantic import Field, ConfigDict
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 from src.utils import app_logger
+from src.tools.query_optimizer import QueryOptimizer
+from src.tools.result_reranker import ResultReranker
+from src.tools.search_quality import SearchQualityEvaluator
 from src.config import settings
 
 
@@ -57,6 +60,11 @@ class RAGKnowledgeBase:
         self.milvus_password = milvus_password
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+
+        # 初始化查询优化器、结果重排序器和质量评估器
+        self.query_optimizer = QueryOptimizer()
+        self.result_reranker = ResultReranker()
+        self.quality_evaluator = SearchQualityEvaluator()
 
         # 初始化嵌入模型
         # 优先使用 RAG 专用的 API 配置，如果没有则回退到全局配置
@@ -190,40 +198,87 @@ class RAGKnowledgeBase:
             app_logger.error(f"添加文本失败: {str(e)}")
             raise
 
-    def search(self, query: str, top_k: int = 5) -> List[Document]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        enable_rerank: bool = True,
+        enable_query_optimization: bool = True
+    ) -> List[Document]:
         """
-        搜索知识库
+        搜索知识库（优化版）
 
         Args:
             query: 查询文本
             top_k: 返回结果数量
+            enable_rerank: 是否启用结果重排序
+            enable_query_optimization: 是否启用查询优化
 
         Returns:
             相关文档列表
         """
         try:
-            results = self.vectorstore.similarity_search(query, k=top_k)
-            app_logger.info(f"知识库搜索完成，返回 {len(results)} 个结果")
-            return results
+            # 使用 search_with_score 并提取文档
+            results_with_score = self.search_with_score(
+                query,
+                top_k,
+                enable_rerank,
+                enable_query_optimization
+            )
+
+            # 只返回文档，不返回分数
+            documents = [doc for doc, _ in results_with_score]
+
+            app_logger.info(f"知识库搜索完成，返回 {len(documents)} 个结果")
+            return documents
 
         except Exception as e:
             app_logger.error(f"知识库搜索失败: {str(e)}")
             return []
 
-    def search_with_score(self, query: str, top_k: int = 5) -> List[tuple]:
+    def search_with_score(
+        self,
+        query: str,
+        top_k: int = 5,
+        enable_rerank: bool = True,
+        enable_query_optimization: bool = True
+    ) -> List[tuple]:
         """
-        搜索知识库并返回相似度分数
+        搜索知识库并返回相似度分数（优化版）
 
         Args:
             query: 查询文本
             top_k: 返回结果数量
+            enable_rerank: 是否启用结果重排序
+            enable_query_optimization: 是否启用查询优化
 
         Returns:
             (文档, 分数) 元组列表
         """
         try:
-            results = self.vectorstore.similarity_search_with_score(query, k=top_k)
-            app_logger.info(f"知识库搜索完成，返回 {len(results)} 个结果")
+            # 1. 查询优化
+            optimized_info = None
+            search_query = query
+
+            if enable_query_optimization:
+                optimized_info = self.query_optimizer.optimize_query(query)
+                search_query = optimized_info['optimized_query']
+                app_logger.info(f"查询优化: '{query}' -> '{search_query}'")
+
+            # 2. 执行向量搜索（获取更多结果用于重排序）
+            fetch_k = top_k * 2 if enable_rerank else top_k
+            results = self.vectorstore.similarity_search_with_score(search_query, k=fetch_k)
+
+            app_logger.info(f"向量搜索完成，获取 {len(results)} 个初始结果")
+
+            # 3. 结果重排序
+            if enable_rerank and results:
+                keywords = optimized_info['keywords'] if optimized_info else []
+                results = self.result_reranker.rerank(results, query, keywords)
+                # 取top_k个结果
+                results = results[:top_k]
+                app_logger.info(f"重排序完成，返回 {len(results)} 个最终结果")
+
             return results
 
         except Exception as e:
@@ -309,10 +364,19 @@ class RAGSearchTool(BaseTool):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def _run(self, query: str) -> str:
-        """执行知识库搜索"""
+        """执行知识库搜索（优化版）"""
         try:
-            # 搜索知识库
-            results = self.knowledge_base.search_with_score(query, top_k=self.top_k)
+            # 1. 查询优化
+            optimized_info = self.knowledge_base.query_optimizer.optimize_query(query)
+            keywords = optimized_info['keywords']
+
+            # 2. 搜索知识库（启用查询优化和结果重排序）
+            results = self.knowledge_base.search_with_score(
+                query,
+                top_k=self.top_k,
+                enable_rerank=True,
+                enable_query_optimization=True
+            )
 
             if not results:
                 return """【知识库搜索结果】
@@ -324,10 +388,27 @@ class RAGSearchTool(BaseTool):
 3. 可以基于通用知识回答，但需要明确告知用户信息来源不是知识库
 """
 
-            # 格式化结果
+            # 3. 质量评估
+            evaluation = self.knowledge_base.quality_evaluator.evaluate(
+                query, results, keywords
+            )
+
+            # 4. 格式化结果（保持原有格式）
             formatted_results = ["【知识库搜索结果】\n"]
             formatted_results.append(f"查询: {query}")
             formatted_results.append(f"找到 {len(results)} 条相关信息：\n")
+
+            # 添加质量评估摘要（简洁版）
+            quality_level_names = {
+                'EXCELLENT': '优秀', 'GOOD': '良好', 'FAIR': '一般',
+                'POOR': '较差', 'VERY_POOR': '很差'
+            }
+            quality_name = quality_level_names.get(evaluation['quality_level'], '未知')
+            formatted_results.append(
+                f"质量评估: {quality_name} "
+                f"(综合得分: {evaluation['quality_score']:.1%}, "
+                f"高质量结果: {evaluation['high_quality_count']} 个)\n"
+            )
 
             for i, (doc, score) in enumerate(results, 1):
                 similarity = 1 - score
@@ -360,6 +441,12 @@ class RAGSearchTool(BaseTool):
             formatted_results.append("- 请优先使用高相似度的结果回答用户问题")
             formatted_results.append("- 回答时请引用具体的来源信息")
             formatted_results.append("- 如果多个结果相关，可以综合使用")
+
+            # 添加质量建议（如果有）
+            if evaluation['recommendations']:
+                formatted_results.append("\n【质量建议】")
+                for rec in evaluation['recommendations'][:2]:  # 只显示前2条建议
+                    formatted_results.append(f"- {rec}")
 
             return "\n".join(formatted_results)
 
