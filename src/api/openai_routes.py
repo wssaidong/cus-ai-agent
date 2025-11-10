@@ -143,59 +143,60 @@ async def stream_graph(
     messages: List,
     session_id: str
 ) -> AsyncIterator[str]:
-    """流式调用图 - 使用 astream_events 获取真正的 token 级别流式输出"""
+    """
+    流式调用图 - 使用 stream_mode="messages" 捕获真实的 LLM token 流
+
+    策略：
+    1. 使用 graph.astream() 配合 stream_mode="messages"
+    2. 自动捕获所有 LLM 的流式输出 token（即使使用 .invoke()）
+    3. 通过 metadata 过滤，只输出 Worker Agent 和 Responder 的内容，跳过 Supervisor
+
+    参考：https://docs.langchain.com/oss/python/langgraph/streaming
+    """
+    from src.utils import app_logger
+
     # 获取图
     graph = get_chat_graph()
 
     # 创建状态
     state = create_chat_state(messages=messages, session_id=session_id)
 
-    # 流式调用图 - 使用 astream_events 获取 token 级别的流式输出
+    # 流式调用图
     config = {"configurable": {"thread_id": session_id}}
 
-    # 跟踪当前节点和已发送内容的节点
+    from langchain_core.messages import AIMessageChunk
+
+    app_logger.info(f"[StreamGraph] 开始流式输出，session_id={session_id}")
+
+    token_count = 0
     current_node = None
-    worker_content_sent = set()
 
-    async for event in graph.astream_events(state, config=config, version="v2"):
-        kind = event.get("event")
+    # 使用 stream_mode="messages" 捕获 LLM 的流式输出
+    # 返回 (message_chunk, metadata) 元组
+    async for msg, metadata in graph.astream(
+        state,
+        config=config,
+        stream_mode="messages"
+    ):
+        # 获取当前节点名称
+        langgraph_node = metadata.get("langgraph_node", "")
 
-        # 跟踪当前节点
-        if kind == "on_chain_start":
-            metadata = event.get("metadata", {})
-            langgraph_node = metadata.get("langgraph_node", "")
-            if langgraph_node:
-                current_node = langgraph_node
+        # 跟踪节点切换
+        if langgraph_node and langgraph_node != current_node:
+            current_node = langgraph_node
+            app_logger.info(f"[StreamGraph] 进入节点: {current_node}")
 
-        # 捕获 LLM 的流式输出 token
-        if kind == "on_chat_model_stream":
-            # 只输出非 Supervisor 节点的内容
-            if current_node and current_node != "supervisor":
-                chunk = event.get("data", {}).get("chunk", {})
+        # 只输出非 Supervisor 节点的内容
+        # Worker Agents: search_agent, write_agent, analysis_agent, execution_agent, quality_agent
+        # Responder: responder
+        if langgraph_node in ["responder", "search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent"]:
+            # 只处理 AIMessageChunk（流式 token），跳过完整的 AIMessage
+            if isinstance(msg, AIMessageChunk) and hasattr(msg, "content") and msg.content:
+                token_count += 1
+                # 直接发送 token，无延迟
+                yield msg.content
 
-                # 提取内容
-                if hasattr(chunk, "content") and chunk.content:
-                    # 标记该节点已发送内容
-                    worker_content_sent.add(current_node)
-                    # 发送 token
-                    yield chunk.content
-
-        # 捕获节点完成事件（处理非流式节点）
-        if kind == "on_chain_end":
-            metadata = event.get("metadata", {})
-            langgraph_node = metadata.get("langgraph_node", "")
-
-            # 处理 Worker 节点（如果流式输出没有捕获到）
-            worker_nodes = ["search_agent", "write_agent", "analysis_agent", "execution_agent", "quality_agent", "responder"]
-            if langgraph_node in worker_nodes and langgraph_node not in worker_content_sent:
-                output = event.get("data", {}).get("output", {})
-                messages_list = output.get("messages", [])
-
-                if messages_list:
-                    last_message = messages_list[-1]
-                    if hasattr(last_message, "content") and last_message.content:
-                        worker_content_sent.add(langgraph_node)
-                        yield last_message.content
+    app_logger.info(f"[StreamGraph] 流式输出完成，共发送 {token_count} 个 token")
 
 
 # ==========================================
@@ -271,7 +272,12 @@ async def chat_completions(request: OpenAIChatRequest):
 
             return StreamingResponse(
                 generate_stream(),
-                media_type="text/event-stream"
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+                    "Connection": "keep-alive",
+                }
             )
 
         # 非流式输出

@@ -60,9 +60,6 @@ class SupervisorAgent:
             openai_api_key=settings.openai_api_key,
             openai_api_base=settings.openai_api_base,
             streaming=True,  # 启用流式输出
-            model_kwargs={
-                "response_format": {"type": "json_object"}  # 强制 JSON 输出
-            }
         )
 
         # 可用的 Worker Agents

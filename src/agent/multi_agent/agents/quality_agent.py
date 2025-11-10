@@ -101,17 +101,21 @@ class QualityAgent:
 5. **所有回答必须使用中文，不要使用英文**
 """
 
-    async def __call__(self, state: ChatState) -> Dict[str, Any]:
+    async def __call__(self, state: ChatState, config) -> Dict[str, Any]:
         """
         执行质量评估和优化任务
 
         Args:
             state: 对话状态
+            config: LangGraph 配置（用于流式输出追踪）
 
         Returns:
             Dict: 更新后的状态
         """
         messages = state.get("messages", [])
+
+        # 保存 config 到实例变量，供内部方法使用
+        self._config = config
 
         # 获取最后一条消息（应该是 Supervisor 的任务指令）
         if not messages:
@@ -191,7 +195,8 @@ class QualityAgent:
             HumanMessage(content=evaluation_prompt)
         ]
 
-        response = await self.llm.ainvoke(prompt_messages)
+        # 传递 config 以启用流式追踪
+        response = await self.llm.ainvoke(prompt_messages, getattr(self, '_config', {}))
         evaluation_result = response.content
 
         # 解析评估结果
@@ -299,7 +304,8 @@ class QualityAgent:
             HumanMessage(content=optimization_prompt)
         ]
 
-        response = await self.llm.ainvoke(prompt_messages)
+        # 传递 config 以启用流式追踪
+        response = await self.llm.ainvoke(prompt_messages, getattr(self, '_config', {}))
         optimized_answer = response.content
 
         return f"""## 回答优化完成
