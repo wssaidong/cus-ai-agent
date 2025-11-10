@@ -173,12 +173,13 @@ class SearchAgent:
 5. **全部使用中文回答，不要使用英文**
 """
 
-    async def execute(self, state: ChatState) -> Dict[str, Any]:
+    async def execute(self, state: ChatState, config) -> Dict[str, Any]:
         """
         执行搜索任务
 
         Args:
             state: 当前聊天状态
+            config: LangGraph 配置（用于流式输出追踪）
 
         Returns:
             更新后的状态字段
@@ -227,8 +228,9 @@ class SearchAgent:
         self._log_prompt(prompt_messages)
 
         # 调用 LLM（可能会调用工具）
+        # 传递 config 以启用流式追踪
         try:
-            response = await self.llm_with_tools.ainvoke(prompt_messages)
+            response = await self.llm_with_tools.ainvoke(prompt_messages, config)
 
             # 处理工具调用
             if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -279,7 +281,8 @@ class SearchAgent:
                     prompt_messages.append(tool_msg)
 
                 # 再次调用 LLM 生成最终响应
-                final_response = await self.llm.ainvoke(prompt_messages)
+                # 传递 config 以启用流式追踪
+                final_response = await self.llm.ainvoke(prompt_messages, config)
                 response_text = final_response.content
             else:
                 # 没有工具调用，直接使用响应

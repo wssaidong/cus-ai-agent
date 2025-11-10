@@ -151,21 +151,62 @@ def _route_after_supervision(state: ChatState) -> Literal["search_agent", "write
 
 def _create_responder():
     """
-    创建响应者节点
+    创建响应者节点 - 使用 Runnable 链实现真正的流式输出
 
-    用于直接回答用户（不需要调用 Worker Agent）
+    关键改进：
+    1. 使用 RunnablePassthrough 和 RunnableLambda 构建 Runnable 链
+    2. LLM 作为链的一部分，astream_events 可以捕获其流式输出
+    3. 支持真正的 token 级别流式输出
     """
-    async def respond(state: ChatState):
-        """直接回答"""
-        from langchain_core.messages import AIMessage
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    from src.config import settings
 
+    # 创建支持流式输出的 LLM
+    llm = ChatOpenAI(
+        model=settings.model_name,
+        temperature=0.7,
+        max_tokens=settings.max_tokens,
+        openai_api_key=settings.openai_api_key,
+        openai_api_base=settings.openai_api_base,
+        streaming=True,  # 启用流式输出
+    )
+
+    # 创建提示模板
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "你是一个智能助手。你的任务是将以下指导内容直接输出给用户，不要修改、不要总结、不要添加任何额外内容。"),
+        ("human", "{task_instruction}")
+    ])
+
+    # 创建 Runnable 链：prompt -> llm -> output_parser
+    # 添加名称标签，帮助 astream_events 追踪
+    chain = (prompt | llm | StrOutputParser()).with_config({"run_name": "responder_chain"})
+
+    async def respond(state: ChatState, config):
+        """
+        使用 Runnable 链生成回答 - 支持真正的流式输出
+
+        注意：必须接受 config 参数并传递给 chain.ainvoke()
+        这样 LangGraph 才能正确追踪流式输出
+        """
         task_instruction = state.get("task_instruction", "")
 
-        app_logger.info(f"[Responder] 直接回答: {task_instruction[:100]}...")
+        app_logger.info(f"[Responder] 使用 Runnable 链生成回答...")
+        app_logger.info(f"[Responder] 指导内容长度: {len(task_instruction)} 字符")
+        app_logger.info(f"[Responder] 指导内容: {task_instruction}")
+
+        # 调用 Runnable 链，传递 config 以启用流式追踪
+        # 这样 stream_mode="messages" 才能捕获 LLM 的 token 流
+        content = await chain.ainvoke({"task_instruction": task_instruction}, config)
+
+        app_logger.info(f"[Responder] 回答生成完成: {len(content)} 字符")
+        app_logger.info(f"[Responder] 回答内容: {content}")
 
         # 将回答添加到消息历史
         return {
-            "messages": [AIMessage(content=task_instruction)],
+            "messages": [AIMessage(content=content)],
             "is_finished": True,
         }
 
