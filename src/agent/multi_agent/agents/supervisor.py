@@ -53,7 +53,9 @@ class SupervisorAgent:
             worker_tools: 每个 Worker 的工具映射 {"worker_name": [tools]}
         """
         self.name = "Supervisor"
-        self.llm = llm or ChatOpenAI(
+
+        # 创建基础 LLM
+        base_llm = llm or ChatOpenAI(
             model=settings.model_name,
             temperature=0.2,  # 低温度，保持决策的一致性和准确性
             max_tokens=settings.max_tokens,
@@ -61,6 +63,10 @@ class SupervisorAgent:
             openai_api_base=settings.openai_api_base,
             streaming=True,  # 启用流式输出
         )
+
+        # 绑定 JSON 模式 - 强制 LLM 返回 JSON 格式
+        # 这是 OpenAI 的 JSON Mode，确保响应始终是有效的 JSON
+        self.llm = base_llm.bind(response_format={"type": "json_object"})
 
         # 可用的 Worker Agents
         self.worker_names = worker_names or [
@@ -205,23 +211,28 @@ class SupervisorAgent:
 - 任务已经完成且用户满意
 
 【输出格式】
-⚠️ **极其重要：你必须只输出 JSON，不要输出任何其他文本！**
+🚨 **系统已启用 JSON 模式 - 你的输出将自动被强制为 JSON 格式** 🚨
 
-你的输出必须是一个有效的 JSON 对象，格式如下：
+**重要说明：**
+- 系统已配置 OpenAI JSON Mode，你的响应会被自动验证为有效的 JSON
+- 你必须输出一个有效的 JSON 对象，否则请求会失败
+- 不要使用 markdown 代码块（```json），直接输出 JSON 对象即可
 
+**必需的 JSON 格式：**
 {{
-  "next_agent": "search_agent|write_agent|analysis_agent|execution_agent|respond|finish",
+  "next_agent": "search_agent|write_agent|analysis_agent|execution_agent|quality_agent|respond|finish",
   "task_instruction": "给 Worker Agent 的具体任务指令或回答内容",
   "reasoning": "决策理由"
 }}
 
-**禁止的输出示例：**
-❌ "查询网关日志数据..."（纯文本，不是 JSON）
-❌ "让我帮你查询..." {{...}}（JSON 前有文本）
-❌ 任何不是 JSON 对象的输出
+**字段说明：**
+- next_agent: 必填，下一个要调用的 Agent 或操作（从上述选项中选择）
+- task_instruction: 必填，具体的任务指令或回答内容
+- reasoning: 必填，你做出这个决策的理由
 
-**正确的输出示例：**
-✅ {{"next_agent": "worker_name", "task_instruction": "...", "reasoning": "..."}}
+**示例：**
+{{"next_agent": "search_agent", "task_instruction": "搜索MGW网关配置方法", "reasoning": "用户询问网关配置，需要搜索知识库"}}
+{{"next_agent": "respond", "task_instruction": "你好！我可以帮你搜索知识、管理数据、分析问题等。", "reasoning": "用户问候，直接友好回应"}}
 
 【示例】
 
@@ -637,7 +648,7 @@ class SupervisorAgent:
         # 记录提示
         self._log_prompt(prompt_messages)
 
-        # 调用 LLM
+        # 调用 LLM（已启用 JSON Mode）
         try:
             response = await self.llm.ainvoke(prompt_messages)
             response_text = response.content
@@ -645,32 +656,27 @@ class SupervisorAgent:
             # 记录响应
             self._log_response(response_text)
 
-            # 解析响应
-            import json
-            import re
+            # 解析响应 - 由于启用了 JSON Mode，响应应该总是有效的 JSON
+            decision = self._extract_json_from_response(response_text)
 
-            # 提取 JSON（可能被包裹在 ```json ``` 中）
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # 尝试查找任何 JSON 对象
-                json_match = re.search(r'\{.*?\}', response_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    # 没有找到 JSON，记录原始响应
-                    app_logger.error(f"[{self.name}] 无法从响应中提取 JSON")
-                    app_logger.error(f"[{self.name}] 原始响应: {response_text[:500]}")
-                    raise ValueError("响应中没有有效的 JSON 格式")
+            # 如果 JSON Mode 失败（极少情况），尝试重新请求
+            if decision is None:
+                app_logger.warning(f"[{self.name}] JSON Mode 提取失败（罕见情况），尝试重新请求...")
+                decision = await self._retry_with_json_enforcement(prompt_messages, response_text)
 
-            # 尝试解析 JSON
-            try:
-                decision = json.loads(json_str)
-            except json.JSONDecodeError as je:
-                app_logger.error(f"[{self.name}] JSON 解析失败: {je}")
-                app_logger.error(f"[{self.name}] 尝试解析的内容: {json_str[:500]}")
-                raise
+            # 如果重试后仍然失败，使用智能解析作为最后的后备方案
+            if decision is None:
+                app_logger.warning(f"[{self.name}] 重试失败，使用智能解析作为后备...")
+                decision = self._intelligent_parse_response(response_text)
+
+            # 如果所有方法都失败，使用默认决策
+            if decision is None:
+                app_logger.error(f"[{self.name}] 所有解析方法都失败，使用默认决策")
+                app_logger.error(f"[{self.name}] 原始响应: {response_text}")
+                return {
+                    "next_agent": "respond",
+                    "task_instruction": "抱歉，我在理解你的请求时遇到了问题。能否换个方式描述一下你的需求？",
+                }
 
             next_agent = decision.get("next_agent", "respond")
             task_instruction = decision.get("task_instruction", "")
@@ -698,6 +704,162 @@ class SupervisorAgent:
                 "next_agent": "respond",
                 "task_instruction": "抱歉，我在处理你的请求时遇到了问题。请重新描述你的需求。",
             }
+
+    def _extract_json_from_response(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """
+        从响应中提取 JSON（优化版 - 适配 JSON Mode）
+
+        由于启用了 OpenAI JSON Mode，响应应该总是有效的 JSON。
+        但仍然提供多种提取方法作为后备。
+
+        尝试顺序：
+        1. 直接解析整个响应（JSON Mode 的标准情况）
+        2. 去除空白后解析
+        3. 查找 JSON 对象（处理可能的额外文本）
+        4. 提取代码块中的 JSON（处理意外的 markdown 格式）
+
+        Args:
+            response_text: LLM 响应文本
+
+        Returns:
+            解析后的 JSON 字典，如果失败返回 None
+        """
+        import json
+        import re
+
+        # 方法1: 直接解析整个响应（JSON Mode 的标准情况）
+        try:
+            result = json.loads(response_text)
+            app_logger.debug(f"[{self.name}] ✅ 直接解析成功（JSON Mode 正常工作）")
+            return result
+        except json.JSONDecodeError as e:
+            app_logger.warning(f"[{self.name}] 直接解析失败: {e}")
+
+        # 方法2: 去除空白后解析
+        try:
+            result = json.loads(response_text.strip())
+            app_logger.debug(f"[{self.name}] ✅ 去除空白后解析成功")
+            return result
+        except json.JSONDecodeError:
+            pass
+
+        # 方法3: 查找第一个完整的 JSON 对象（处理可能的额外文本）
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+        if json_match:
+            try:
+                result = json.loads(json_match.group(0))
+                app_logger.warning(f"[{self.name}] ⚠️ 通过正则提取 JSON 成功（响应包含额外文本）")
+                return result
+            except json.JSONDecodeError:
+                pass
+
+        # 方法4: 提取 markdown 代码块中的 JSON（不应该发生，但作为后备）
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            try:
+                result = json.loads(json_match.group(1))
+                app_logger.warning(f"[{self.name}] ⚠️ 从代码块提取 JSON 成功（LLM 未遵守 JSON Mode）")
+                return result
+            except json.JSONDecodeError:
+                pass
+
+        # 所有方法都失败
+        app_logger.error(f"[{self.name}] ❌ 无法从响应中提取有效的 JSON")
+        app_logger.error(f"[{self.name}] 原始响应: {response_text[:500]}")
+        return None
+
+    async def _retry_with_json_enforcement(
+        self,
+        original_messages: List,
+        failed_response: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        重试请求，强制要求 JSON 格式
+
+        Args:
+            original_messages: 原始消息列表
+            failed_response: 失败的响应文本
+
+        Returns:
+            解析后的 JSON 字典，如果失败返回 None
+        """
+        import json
+
+        # 添加强制 JSON 格式的消息
+        retry_messages = original_messages + [
+            HumanMessage(content=f"""你的上一个回答不是有效的 JSON 格式：
+"{failed_response[:200]}"
+
+请严格按照要求，只输出一个 JSON 对象，不要有任何其他文本。
+格式必须是：
+{{"next_agent": "...", "task_instruction": "...", "reasoning": "..."}}
+
+现在请重新输出正确的 JSON：""")
+        ]
+
+        try:
+            response = await self.llm.ainvoke(retry_messages)
+            response_text = response.content
+
+            app_logger.info(f"[{self.name}] 重试响应: {response_text[:200]}...")
+
+            # 尝试提取 JSON
+            return self._extract_json_from_response(response_text)
+        except Exception as e:
+            app_logger.error(f"[{self.name}] 重试请求失败: {e}")
+            return None
+
+    def _intelligent_parse_response(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """
+        智能解析响应文本（当无法提取 JSON 时的后备方案）
+
+        尝试从纯文本响应中推断用户意图和决策
+
+        Args:
+            response_text: LLM 响应文本
+
+        Returns:
+            推断的决策字典，如果失败返回 None
+        """
+        response_lower = response_text.lower()
+
+        # 检查是否包含 Worker 名称
+        for worker_name in self.worker_names:
+            if worker_name in response_lower or worker_name.replace("_", " ") in response_lower:
+                app_logger.info(f"[{self.name}] 智能解析：检测到 Worker '{worker_name}'")
+                return {
+                    "next_agent": worker_name,
+                    "task_instruction": response_text,
+                    "reasoning": "从文本响应中智能推断"
+                }
+
+        # 检查是否是问候或简单回答
+        greetings = ["你好", "hello", "hi", "您好", "欢迎"]
+        if any(greeting in response_lower for greeting in greetings):
+            app_logger.info(f"[{self.name}] 智能解析：检测到问候")
+            return {
+                "next_agent": "respond",
+                "task_instruction": response_text,
+                "reasoning": "问候或简单回答"
+            }
+
+        # 检查是否包含搜索、查询相关词汇
+        search_keywords = ["搜索", "查询", "查找", "search", "query", "find"]
+        if any(keyword in response_lower for keyword in search_keywords):
+            app_logger.info(f"[{self.name}] 智能解析：检测到搜索意图")
+            return {
+                "next_agent": "search_agent",
+                "task_instruction": response_text,
+                "reasoning": "检测到搜索相关关键词"
+            }
+
+        # 默认：直接回答
+        app_logger.info(f"[{self.name}] 智能解析：默认为直接回答")
+        return {
+            "next_agent": "respond",
+            "task_instruction": response_text,
+            "reasoning": "无法明确判断意图，默认直接回答"
+        }
 
     def _log_prompt(self, messages):
         """记录提示"""
