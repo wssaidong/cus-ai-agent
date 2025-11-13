@@ -16,16 +16,21 @@ pydantic==2.10.4
 pydantic-settings==2.6.1
 
 # ==========================================
-# LangChain AI 生态系统 - 兼容版本范围
+# LangChain AI 生态系统 - 升级到 1.0 版本
 # ==========================================
-# 注意：使用兼容版本范围让 pip 自动解决 langchain-mcp-adapters 的依赖冲突
-langchain>=0.3.7,<0.4.0
-langchain-core>=0.3.36,<0.4.0
+# LangChain & LangGraph 1.0 升级说明：
+# - LangGraph 1.0 需要 langchain-core>=1.0.0
+# - LangGraph 1.0 基本向后兼容，主要弃用了 create_react_agent
+# - 需要 Python 3.10+ (Python 3.9 已停止支持)
+# - 项目中使用的 API (StateGraph, InMemorySaver, add_messages) 在 1.0 中保持兼容
+# - langchain-core 1.0 是主要升级，其他包跟随升级
+langchain>=1.0.0,<2.0.0
+langchain-core>=1.0.0,<2.0.0
 langchain-community>=0.3.7,<0.4.0
 langchain-openai>=0.2.8,<0.3.0
-langgraph>=0.2.45,<0.3.0
-langgraph-checkpoint>=2.0.2,<3.0.0
-langsmith>=0.1.143,<0.3.0
+langgraph>=1.0.0,<2.0.0
+langgraph-checkpoint>=2.0.2,<4.0.0
+langsmith>=0.1.143,<1.0.0
 langchain-mcp-adapters>=0.1.11,<0.2.0
 
 # ==========================================
@@ -46,8 +51,8 @@ loguru==0.7.2
 # ==========================================
 # RAG 向量数据库
 # ==========================================
-pymilvus==2.5.7
-langchain-milvus==0.2.0
+pymilvus>=2.5.7,<3.0.0
+langchain-milvus>=0.2.2,<0.3.0
 
 # ==========================================
 # 文档处理（仅保留实际使用的）
