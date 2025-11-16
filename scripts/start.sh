@@ -3,7 +3,7 @@
 # ==========================================
 # cus-ai-agent 服务启动脚本
 # ==========================================
-# 
+#
 # 用途: 启动 AI Agent API 服务
 # 使用: ./scripts/start.sh [选项]
 #
@@ -58,6 +58,18 @@ print_error() {
 
 print_header() {
     echo -e "${CYAN}$1${NC}"
+}
+
+# 使用 pip 安装依赖，增加镜像和超时支持
+install_requirements() {
+    # 优先使用环境变量 PIP_INDEX_URL，其次使用清华镜像
+    local index_url="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+    print_info "使用 pip 安装依赖 (index-url: $index_url)"
+
+    pip install -r requirements.txt \
+        -i "$index_url" \
+        --timeout "${PIP_TIMEOUT:-600}" \
+        --retries "${PIP_RETRIES:-5}"
 }
 
 # 显示帮助信息
@@ -156,7 +168,7 @@ print_success "Python 版本: $PYTHON_VERSION"
 # 检查虚拟环境
 if [ -z "$VIRTUAL_ENV" ]; then
     print_warning "未检测到虚拟环境"
-    
+
     if [ -d "venv" ]; then
         print_info "发现 venv 目录，尝试激活..."
         source venv/bin/activate
@@ -209,26 +221,26 @@ print_info "检查依赖包..."
 if [ -f "requirements.txt" ]; then
     # 检查关键依赖
     MISSING_DEPS=()
-    
+
     if ! python -c "import fastapi" 2>/dev/null; then
         MISSING_DEPS+=("fastapi")
     fi
-    
+
     if ! python -c "import langgraph" 2>/dev/null; then
         MISSING_DEPS+=("langgraph")
     fi
-    
+
     if ! python -c "import langchain" 2>/dev/null; then
         MISSING_DEPS+=("langchain")
     fi
-    
+
     if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
         print_warning "缺少依赖: ${MISSING_DEPS[*]}"
         read -p "是否安装依赖? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             print_info "安装依赖..."
-            pip install -r requirements.txt
+            install_requirements
             if [ $? -eq 0 ]; then
                 print_success "依赖安装成功"
             else
@@ -251,7 +263,7 @@ if [[ "$LANGGRAPH_VERSION" == "unknown" ]]; then
     print_error "无法获取 LangGraph 版本"
 else
     print_success "LangGraph 版本: $LANGGRAPH_VERSION"
-    
+
     # 检查是否为 1.0+ 版本
     MAJOR_VERSION=$(echo $LANGGRAPH_VERSION | cut -d. -f1)
     if [ "$MAJOR_VERSION" -lt 1 ]; then
@@ -264,12 +276,12 @@ fi
 print_info "检查端口 $PORT..."
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
     print_warning "端口 $PORT 已被占用"
-    
+
     # 显示占用进程
     PID=$(lsof -Pi :$PORT -sTCP:LISTEN -t)
     PROCESS=$(ps -p $PID -o comm= 2>/dev/null || echo "unknown")
     print_info "占用进程: $PROCESS (PID: $PID)"
-    
+
     read -p "是否终止该进程? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -320,7 +332,7 @@ if [ "$DEV_MODE" = true ]; then
 else
     # 生产模式
     print_info "生产模式启动"
-    
+
     if [ "$WORKERS" -gt 1 ]; then
         print_info "使用 $WORKERS 个工作进程"
         # 使用 gunicorn
