@@ -91,6 +91,7 @@ class A2AAutoRegister:
                     if host == "0.0.0.0":
                         host = "127.0.0.1"
 
+                    # 默认将 AgentCard.url 指向 A2A JSON-RPC 入口
                     url = f"http://{host}:{port}/api/v1/a2a"
 
             # 默认技能列表

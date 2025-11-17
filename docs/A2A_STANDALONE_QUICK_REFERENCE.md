@@ -75,7 +75,7 @@ curl -X POST "http://localhost:8000/api/v1/a2a/agent-cards" \
     "name": "my-agent",
     "description": "我的智能体",
     "version": "1.0.0",
-    "url": "http://127.0.0.1:8000/a2a/v1",
+    "url": "http://127.0.0.1:8000/api/v1/a2a",
     "skills": [
       {
         "id": "chat",
@@ -131,7 +131,7 @@ success = manager.create_agent_card(
     name="my-agent",
     description="我的智能体",
     version="1.0.0",
-    url="http://127.0.0.1:8000/a2a/v1",
+    url="http://127.0.0.1:8000/api/v1/a2a",
     skills=[
         {
             "id": "chat",
@@ -300,7 +300,7 @@ A2A 相关日志会输出到应用日志中，包括：
   ],
   "defaultInputModes": ["application/json", "text/plain"],
   "defaultOutputModes": ["application/json"],
-  "url": "http://127.0.0.1:8000/a2a/v1",
+  "url": "http://127.0.0.1:8000/api/v1/a2a",
   "iconUrl": "http://example.com/icon.png",
   "provider": {
     "organization": "Your Organization",

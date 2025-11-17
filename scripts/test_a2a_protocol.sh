@@ -80,7 +80,7 @@ create_agent_card() {
     "name": "'"${AGENT_NAME}"'",
     "description": "A2A 协议测试智能体",
     "version": "'"${AGENT_VERSION}"'",
-    "url": "http://127.0.0.1:8000/a2a/v1",
+    "url": "http://127.0.0.1:8000/api/v1/a2a",
     "protocol_version": "0.2.9",
     "preferred_transport": "JSONRPC",
     "registration_type": "SERVICE",

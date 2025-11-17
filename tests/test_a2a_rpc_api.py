@@ -8,6 +8,7 @@
 - tasks/get 与 tasks/cancel 的错误返回
 """
 
+import json
 from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi.testclient import TestClient
@@ -41,7 +42,7 @@ def test_message_send_success(mock_get_graph):
         },
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["jsonrpc"] == "2.0"
@@ -63,7 +64,7 @@ def test_method_not_found():
         "params": {},
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["error"]["code"] == -32601
@@ -78,7 +79,7 @@ def test_invalid_jsonrpc_version():
         "params": {},
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["error"]["code"] == -32600
@@ -93,7 +94,7 @@ def test_invalid_params_no_message():
         "params": {},
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["error"]["code"] == -32602
@@ -108,7 +109,7 @@ def test_tasks_get_not_found():
         "params": {"id": "non-existent"},
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["error"]["code"] == -32001
@@ -123,8 +124,96 @@ def test_tasks_cancel_not_supported():
         "params": {"id": "non-existent"},
     }
 
-    response = client.post("/a2a/v1", json=payload)
+    response = client.post("/api/v1/a2a", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["error"]["code"] == -32002
 
+
+
+
+@patch("src.api.a2a_rpc_routes.stream_graph")
+def test_message_stream_basic(mock_stream_graph):
+    """message/stream 基本流式行为，返回 text/event-stream 且至少有一条 JSON-RPC data。"""
+
+    async def fake_stream(model_name, messages, session_id):
+        # 模拟两段 token 输出
+        for token in ["你", "好"]:
+            yield token
+
+    mock_stream_graph.side_effect = fake_stream
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "stream-1",
+        "method": "message/stream",
+        "params": {
+            "message": {
+                "role": "user",
+                "parts": [
+                    {"kind": "text", "text": "流式问答测试"},
+                ],
+            },
+            "metadata": {"foo": "bar"},
+        },
+    }
+
+    response = client.post("/api/v1/a2a", json=payload)
+    assert response.status_code == 200
+    # 有些框架会在 content-type 后追加编码信息，这里使用 startswith 兼容
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = []
+    for line in response.iter_lines():
+        if not line:
+            continue
+        # TestClient.iter_lines() 已返回 str，这里直接使用即可
+        line = line
+        if not line.startswith("data: "):
+            continue
+        data = line[6:]
+        if data == "[DONE]":
+            break
+        events.append(json.loads(data))
+
+    # 至少收到一条事件
+    assert len(events) >= 1
+
+    first = events[0]
+    assert first["jsonrpc"] == "2.0"
+    assert first["id"] == "stream-1"
+    assert "result" in first
+    result = first["result"]
+    assert "task" in result and "events" in result
+    assert result["task"]["state"] in ("working", "completed")
+
+
+def test_message_stream_invalid_params():
+    """message/stream 在 params 缺失时以 SSE error 返回。"""
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "stream-err",
+        "method": "message/stream",
+        "params": {},
+    }
+
+    response = client.post("/api/v1/a2a", json=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    # 读取首条事件，应为 error
+    for line in response.iter_lines():
+        if not line:
+            continue
+        # TestClient.iter_lines() 已经返回 str，这里直接使用
+        line = line
+        if not line.startswith("data: "):
+            continue
+        data = line[6:]
+        if data == "[DONE]":
+            continue
+        event = json.loads(data)
+        assert "error" in event
+        assert event["error"]["code"] == -32602
+        break

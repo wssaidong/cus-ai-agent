@@ -36,9 +36,9 @@ app.add_middleware(
 )
 
 # 注册路由
-# A2A JSON-RPC 接口（/a2a/v1）
+# A2A JSON-RPC 接口（/api/v1/a2a）
 app.include_router(a2a_rpc_router)
-app_logger.info("A2A JSON-RPC API 已注册到 /a2a/v1")
+app_logger.info("A2A JSON-RPC API 已注册到 /api/v1/a2a")
 
 # OpenAI 兼容 API（/v1 前缀）
 app.include_router(openai_router)
