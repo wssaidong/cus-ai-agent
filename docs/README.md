@@ -26,6 +26,7 @@
 - [MCP 工具适配器](mcp_adapter_usage.md) - MCP 工具集成指南(旧版)
 - [MCP 迁移指南](mcp_migration_guide.md) - 从 mcp_client 迁移到 mcp_adapter
 - [A2A 快速参考](A2A_STANDALONE_QUICK_REFERENCE.md) - A2A 功能快速参考
+- [A2A JSON-RPC 使用说明](a2a_jsonrpc_usage.md) - 通过 JSON-RPC 调用智能体
 - [A2A URL 配置指南](a2a_url_configuration.md) - A2A 服务 URL 配置详解
 - [工具开发](development-guide.md#添加新工具) - 自定义工具开发
 

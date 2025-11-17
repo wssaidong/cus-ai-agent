@@ -11,6 +11,7 @@ from .routes import router
 from .knowledge_routes import router as knowledge_router
 from .recommendation_routes import router as recommendation_router
 from .a2a_routes import router as a2a_router
+from .a2a_rpc_routes import router as a2a_rpc_router
 from .openai_routes import router as openai_router
 # from .multi_agent_routes import router as multi_agent_router  # 旧架构，已废弃
 
@@ -35,6 +36,10 @@ app.add_middleware(
 )
 
 # 注册路由
+# A2A JSON-RPC 接口（/a2a/v1）
+app.include_router(a2a_rpc_router)
+app_logger.info("A2A JSON-RPC API 已注册到 /a2a/v1")
+
 # OpenAI 兼容 API（/v1 前缀）
 app.include_router(openai_router)
 app_logger.info("OpenAI 兼容 API 已注册到 /v1 前缀")
