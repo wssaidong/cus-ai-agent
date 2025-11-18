@@ -186,6 +186,10 @@ class AgentCardManager:
                 else:
                     app_logger.error(f"✗ AgentCard 创建失败: {result.get('message')}")
                     return False
+            elif response.status_code == 409:
+                # AgentCard 已存在，直接返回成功
+                app_logger.info(f"ℹ️  AgentCard 已存在，跳过注册: {name} v{version}")
+                return True
             else:
                 app_logger.error(f"✗ 请求失败: HTTP {response.status_code}")
                 app_logger.error(f"  响应内容: {response.text}")

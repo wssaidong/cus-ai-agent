@@ -1,17 +1,29 @@
-"""A2A JSON-RPC 入口路由
+"""A2A JSON-RPC 路由
 
-提供基于 A2A 协议的 JSON-RPC 2.0 调用入口，
-目前实现核心方法：message/send、tasks/get、tasks/cancel。
+使用 a2a-sdk 官方服务器实现，不自己实现 JSON-RPC 协议。
+提供 RequestHandler 实现来处理 A2A 协议请求。
 """
-import json
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, ValidationError
-from typing import Literal
-from langchain_core.messages import HumanMessage, AIMessage
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.context import ServerCallContext
+from a2a.server.events.event_queue import Event
+from a2a.types import (
+    Message,
+    Task,
+    TaskStatus,
+    TaskState,
+    TextPart,
+    Role,
+    MessageSendParams,
+    TaskQueryParams,
+    TaskIdParams,
+    TaskPushNotificationConfig,
+    TaskStatusUpdateEvent,
+)
+
+from langchain_core.messages import HumanMessage
 
 from src.agent.multi_agent.chat_graph import get_chat_graph
 from src.agent.multi_agent.chat_state import create_chat_state
@@ -19,298 +31,304 @@ from src.api.openai_routes import stream_graph
 from src.utils import app_logger
 
 
-router = APIRouter(prefix="/api/v1/a2a", tags=["A2A RPC"])
+class A2ARequestHandler(RequestHandler):
+    """A2A 请求处理器实现
 
-
-class JSONRPCError(BaseModel):
-    code: int
-    message: str
-    data: Optional[Dict[str, Any]] = None
-
-
-class JSONRPCRequest(BaseModel):
-    jsonrpc: str = Field("2.0", description="JSON-RPC 版本，仅支持 2.0")
-    method: str
-    id: Optional[Union[str, int]] = None
-    params: Optional[Dict[str, Any]] = None
-
-
-class TextPart(BaseModel):
-    kind: Literal["text"] = "text"
-    text: str
-
-
-class A2AMessage(BaseModel):
-    role: str
-    parts: List[TextPart]
-    messageId: Optional[str] = None
-    taskId: Optional[str] = None
-    contextId: Optional[str] = None
-
-
-class MessageSendParams(BaseModel):
-    message: A2AMessage
-    metadata: Optional[Dict[str, Any]] = None
-
-
-def _jsonrpc_result(id_value: Optional[Union[str, int]], result: Any) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": id_value, "result": result}
-
-
-def _jsonrpc_error(
-    id_value: Optional[Union[str, int]], code: int, message: str, data: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": id_value, "error": JSONRPCError(code=code, message=message, data=data).model_dump()}
-
-
-async def _handle_message_send(req: JSONRPCRequest) -> Dict[str, Any]:
-    if not isinstance(req.params, dict):
-        return _jsonrpc_error(req.id, -32602, "Invalid params", {"reason": "params 必须是对象"})
-
-    try:
-        params = MessageSendParams(**req.params)
-    except ValidationError as e:
-        return _jsonrpc_error(req.id, -32602, "Invalid params", {"errors": e.errors()})
-
-    text_parts = [p for p in params.message.parts if p.kind == "text" and p.text]
-    if not text_parts:
-        return _jsonrpc_error(req.id, -32602, "Invalid params", {"reason": "message.parts 至少包含一个非空 text"})
-
-    question = text_parts[0].text
-    session_id = params.message.contextId or str(uuid.uuid4())
-
-    chat_graph = get_chat_graph()
-    state = create_chat_state(messages=[HumanMessage(content=question)], session_id=session_id)
-    config = {"configurable": {"thread_id": session_id}}
-
-    try:
-        result = await chat_graph.ainvoke(state, config=config)
-    except Exception as e:  # pragma: no cover - 防御性日志
-        app_logger.error(f"A2A message/send 调用对话图失败: {e}")
-        return _jsonrpc_error(req.id, -32603, "Internal error", {"detail": str(e)})
-
-    answer = "抱歉，我无法生成响应。"
-    messages = result.get("messages") if isinstance(result, dict) else None
-    if messages:
-        for msg in reversed(messages):
-            if isinstance(msg, AIMessage):
-                answer = msg.content
-                break
-
-    message_id = params.message.messageId or str(uuid.uuid4())
-    result_obj = {
-        "messageId": message_id,
-        "contextId": session_id,
-        "parts": [{"kind": "text", "text": answer}],
-        "kind": "message",
-        "metadata": params.metadata or {},
-    }
-    return _jsonrpc_result(req.id, result_obj)
-
-
-def _build_streaming_response(
-    req: JSONRPCRequest,
-    generator,
-) -> StreamingResponse:
-    """包装 SSE StreamingResponse，生成 JSON-RPC 响应流。
-
-    注意：A2A 规范要求 SSE 的每条 data 都是 JSON-RPC Response 对象。
+    实现 a2a-sdk 的 RequestHandler 接口，处理所有 A2A 协议请求。
     """
 
-    return StreamingResponse(
-        generator,
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # 禁用反向代理缓冲
-            "Connection": "keep-alive",
-        },
-    )
+    def __init__(self):
+        """初始化请求处理器"""
+        self.tasks = {}  # 简单的内存任务存储
+        app_logger.info("[A2A Handler] 初始化 A2A 请求处理器")
 
 
-def _build_streaming_error_response(
-    req: JSONRPCRequest,
-    code: int,
-    message: str,
-    data: Optional[Dict[str, Any]] = None,
-) -> StreamingResponse:
-    """将 JSON-RPC 错误包装为 SSE 流（单条 error + DONE）。"""
+    async def on_message_send(
+        self,
+        params: MessageSendParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> Task | Message:
+        """处理 message/send 方法 - 同步消息处理"""
+        app_logger.info(f"[A2A Handler] 收到 message/send 请求")
 
-    error_obj = _jsonrpc_error(req.id, code, message, data)
+        message = params.message
 
-    async def error_stream():
-        yield f"data: {json.dumps(error_obj, ensure_ascii=False)}\n\n"
-        yield "data: [DONE]\n\n"
+        # 提取文本内容
+        text_parts = []
+        for part in message.parts:
+            if hasattr(part, 'root') and hasattr(part.root, 'text'):
+                text_parts.append(part.root.text)
+            elif hasattr(part, 'text'):
+                text_parts.append(part.text)
 
-    return _build_streaming_response(req, error_stream())
+        if not text_parts:
+            # 返回错误消息
+            return Message(
+                role=Role.agent,
+                parts=[TextPart(text="错误: 消息中没有文本内容")],
+                message_id=str(uuid.uuid4()),
+                context_id=message.context_id or str(uuid.uuid4()),
+            )
 
+        question = text_parts[0]
+        session_id = message.context_id or str(uuid.uuid4())
 
-def _handle_message_stream(req: JSONRPCRequest) -> StreamingResponse:
-    """A2A message/stream 实现：使用 SSE 推送 JSON-RPC 响应流。
+        app_logger.info(f"[A2A Handler] 问题: {question[:100]}...")
+        app_logger.info(f"[A2A Handler] 会话ID: {session_id}")
 
-    - HTTP 层返回 text/event-stream
-    - 每条 SSE data 是一个 JSON-RPC Response
-    - result 里包含 Task + TaskStatusUpdateEvent 风格的数据（简化实现）
-    """
+        # 获取对话图
+        chat_graph = get_chat_graph()
 
-    # 1. 解析参数
-    if not isinstance(req.params, dict):
-        return _build_streaming_error_response(
-            req,
-            -32602,
-            "Invalid params",
-            {"reason": "params 必须是对象"},
+        # 创建状态
+        state = create_chat_state(
+            messages=[HumanMessage(content=question)],
+            session_id=session_id
         )
 
-    try:
-        params = MessageSendParams(**req.params)
-    except ValidationError as e:
-        return _build_streaming_error_response(
-            req,
-            -32602,
-            "Invalid params",
-            {"errors": e.errors()},
-        )
+        config = {"configurable": {"thread_id": session_id}}
 
-    text_parts = [p for p in params.message.parts if p.kind == "text" and p.text]
-    if not text_parts:
-        return _build_streaming_error_response(
-            req,
-            -32602,
-            "Invalid params",
-            {"reason": "message.parts 至少包含一个非空 text"},
-        )
+        try:
+            # 同步调用对话图
+            result = await chat_graph.ainvoke(state, config=config)
 
-    question = text_parts[0].text
-    session_id = params.message.contextId or str(uuid.uuid4())
-    message_id = params.message.messageId or str(uuid.uuid4())
-    task_id = params.message.taskId or str(uuid.uuid4())
+            # 提取回答
+            answer = "抱歉，我无法生成响应。"
+            messages = result.get("messages") if isinstance(result, dict) else None
+            if messages:
+                from langchain_core.messages import AIMessage
+                for msg in reversed(messages):
+                    if isinstance(msg, AIMessage):
+                        answer = msg.content
+                        break
 
-    async def event_generator():
-        """生成 SSE data: <JSON-RPC Response>\n\n"""
+            # 返回 Message 对象
+            return Message(
+                role=Role.agent,
+                parts=[TextPart(text=answer)],
+                message_id=str(uuid.uuid4()),
+                context_id=session_id,
+            )
 
-        answer_parts: List[str] = []
+        except Exception as e:
+            app_logger.error(f"[A2A Handler] 处理失败: {e}")
+            return Message(
+                role=Role.agent,
+                parts=[TextPart(text=f"错误: {str(e)}")],
+                message_id=str(uuid.uuid4()),
+                context_id=session_id,
+            )
+
+
+    async def on_message_send_stream(
+        self,
+        params: MessageSendParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> AsyncGenerator[Event, None]:
+        """处理 message/stream 方法 - 流式消息处理"""
+        app_logger.info(f"[A2A Handler] 收到 message/stream 请求")
+
+        message = params.message
+
+        # 提取文本内容
+        text_parts = []
+        for part in message.parts:
+            if hasattr(part, 'root') and hasattr(part.root, 'text'):
+                text_parts.append(part.root.text)
+            elif hasattr(part, 'text'):
+                text_parts.append(part.text)
+
+        if not text_parts:
+            # 返回错误事件
+            task_id = str(uuid.uuid4())
+            context_id = message.context_id or str(uuid.uuid4())
+
+            yield TaskStatusUpdateEvent(
+                taskId=task_id,
+                contextId=context_id,
+                final=True,
+                status=TaskStatus(state=TaskState.failed),
+            )
+            return
+
+        question = text_parts[0]
+        session_id = message.context_id or str(uuid.uuid4())
+        task_id = str(uuid.uuid4())
+
+        app_logger.info(f"[A2A Handler] 流式问题: {question[:100]}...")
+        app_logger.info(f"[A2A Handler] 会话ID: {session_id}")
+        app_logger.info(f"[A2A Handler] 任务ID: {task_id}")
+
+        # 存储任务
+        self.tasks[task_id] = {
+            "id": task_id,
+            "context_id": session_id,
+            "state": TaskState.working,
+        }
 
         try:
             # 将用户消息封装为 LangChain HumanMessage
             messages = [HumanMessage(content=question)]
 
-            # 使用已有的 stream_graph 对多智能体对话图进行流式调用
+            # 使用流式调用
+            answer_parts = []
             async for token in stream_graph("a2a-chat", messages, session_id):
                 if not token:
                     continue
 
                 answer_parts.append(token)
 
-                event = {
-                    "type": "TaskStatusUpdateEvent",
-                    "taskId": task_id,
-                    "state": "working",
-                    "final": False,
-                    "messageDelta": {
-                        "messageId": message_id,
-                        "contextId": session_id,
-                        "parts": [
-                            {"kind": "text", "text": token},
-                        ],
-                    },
-                }
-
-                result_obj = {
-                    "task": {
-                        "id": task_id,
-                        "state": "working",
-                        "contextId": session_id,
-                    },
-                    "events": [event],
-                    "final": False,
-                    "metadata": params.metadata or {},
-                }
-
-                response_obj = _jsonrpc_result(req.id, result_obj)
-                yield f"data: {json.dumps(response_obj, ensure_ascii=False)}\n\n"
+                # 生成流式事件 - 中间状态
+                yield TaskStatusUpdateEvent(
+                    taskId=task_id,
+                    contextId=session_id,
+                    final=False,
+                    status=TaskStatus(
+                        state=TaskState.working,
+                        message=Message(
+                            role=Role.agent,
+                            parts=[TextPart(text=token)],
+                            messageId=str(uuid.uuid4()),
+                            contextId=session_id,
+                        ),
+                    ),
+                )
 
             # 发送最终完成事件
             full_answer = "".join(answer_parts) if answer_parts else ""
 
-            final_event = {
-                "type": "TaskStatusUpdateEvent",
-                "taskId": task_id,
-                "state": "completed",
-                "final": True,
-                "message": {
-                    "messageId": message_id,
-                    "contextId": session_id,
-                    "parts": [
-                        {"kind": "text", "text": full_answer},
-                    ],
-                    "kind": "message",
-                    "metadata": params.metadata or {},
-                },
-            }
+            self.tasks[task_id]["state"] = TaskState.completed
 
-            final_result = {
-                "task": {
-                    "id": task_id,
-                    "state": "completed",
-                    "contextId": session_id,
-                },
-                "events": [final_event],
-                "final": True,
-                "metadata": params.metadata or {},
-            }
-
-            final_response = _jsonrpc_result(req.id, final_result)
-            yield f"data: {json.dumps(final_response, ensure_ascii=False)}\n\n"
-
-        except Exception as e:  # pragma: no cover - 防御性日志
-            app_logger.error(f"A2A message/stream 处理异常: {e}")
-            error_obj = _jsonrpc_error(
-                req.id,
-                -32603,
-                "Internal error",
-                {"detail": str(e)},
+            yield TaskStatusUpdateEvent(
+                taskId=task_id,
+                contextId=session_id,
+                final=True,
+                status=TaskStatus(
+                    state=TaskState.completed,
+                    message=Message(
+                        role=Role.agent,
+                        parts=[TextPart(text=full_answer)],
+                        messageId=str(uuid.uuid4()),
+                        contextId=session_id,
+                    ),
+                ),
             )
-            yield f"data: {json.dumps(error_obj, ensure_ascii=False)}\n\n"
 
-        finally:
-            # 通知客户端流结束
-            yield "data: [DONE]\n\n"
+        except Exception as e:
+            app_logger.error(f"[A2A Handler] 流式处理失败: {e}")
 
-    return _build_streaming_response(req, event_generator())
+            self.tasks[task_id]["state"] = TaskState.failed
 
-
-
-@router.post("")
-async def a2a_jsonrpc_endpoint(request: JSONRPCRequest):
-    """A2A JSON-RPC 统一入口，仅支持 JSON-RPC 2.0。
-
-    根据 method 分发到不同的处理函数：
-    - message/send  -> 同步 JSON 响应
-    - message/stream -> SSE 流式 JSON-RPC 响应
-    - tasks/get、tasks/cancel -> 任务相关错误响应（当前为占位实现）
-    """
-    if request.jsonrpc != "2.0":
-        return _jsonrpc_error(request.id, -32600, "Invalid Request", {"reason": "jsonrpc 必须为 '2.0'"})
-
-    try:
-        if request.method == "message/send":
-            return await _handle_message_send(request)
-        if request.method == "message/stream":
-            # 注意：返回的是 StreamingResponse（text/event-stream）
-            return _handle_message_stream(request)
-        if request.method == "tasks/get":
-            # 当前实现同步返回，无任务持久化，统一视为未找到
-            return _jsonrpc_error(request.id, -32001, "Task not found")
-        if request.method == "tasks/cancel":
-            return _jsonrpc_error(
-                request.id,
-                -32002,
-                "Task cannot be canceled",
-                {"reason": "当前实现不支持任务取消"},
+            yield TaskStatusUpdateEvent(
+                taskId=task_id,
+                contextId=session_id,
+                final=True,
+                status=TaskStatus(
+                    state=TaskState.failed,
+                    message=Message(
+                        role=Role.agent,
+                        parts=[TextPart(text=f"错误: {str(e)}")],
+                        messageId=str(uuid.uuid4()),
+                        contextId=session_id,
+                    ),
+                ),
             )
-        return _jsonrpc_error(request.id, -32601, "Method not found")
-    except Exception as e:  # pragma: no cover - 全局兜底
-        app_logger.error(f"A2A JSON-RPC 处理异常: {e}")
-        return _jsonrpc_error(request.id, -32603, "Internal error", {"detail": str(e)})
+
+
+    async def on_get_task(
+        self,
+        params: TaskQueryParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> Task | None:
+        """处理 tasks/get 方法"""
+        app_logger.info(f"[A2A Handler] 收到 tasks/get 请求: {params.id}")
+
+        task_data = self.tasks.get(params.id)
+        if not task_data:
+            return None
+
+        return Task(
+            id=task_data["id"],
+            contextId=task_data["context_id"],
+            status=TaskStatus(state=task_data["state"]),
+        )
+
+    async def on_cancel_task(
+        self,
+        params: TaskIdParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> Task | None:
+        """处理 tasks/cancel 方法"""
+        app_logger.info(f"[A2A Handler] 收到 tasks/cancel 请求: {params.id}")
+
+        task_data = self.tasks.get(params.id)
+        if not task_data:
+            return None
+
+        # 更新任务状态为已取消
+        task_data["state"] = TaskState.canceled
+
+        return Task(
+            id=task_data["id"],
+            contextId=task_data["context_id"],
+            status=TaskStatus(state=TaskState.canceled),
+        )
+
+    async def on_set_task_push_notification_config(
+        self,
+        params: TaskPushNotificationConfig,
+        context: Optional[ServerCallContext] = None,
+    ) -> TaskPushNotificationConfig:
+        """处理 tasks/pushNotificationConfig/set 方法"""
+        app_logger.info(f"[A2A Handler] 收到 pushNotificationConfig/set 请求")
+        # 简单返回相同配置
+        return params
+
+    async def on_get_task_push_notification_config(
+        self,
+        params: TaskIdParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> TaskPushNotificationConfig | None:
+        """处理 tasks/pushNotificationConfig/get 方法"""
+        app_logger.info(f"[A2A Handler] 收到 pushNotificationConfig/get 请求")
+        # 当前不支持，返回 None
+        return None
+
+    async def on_delete_task_push_notification_config(
+        self,
+        params: TaskIdParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> bool:
+        """处理 tasks/pushNotificationConfig/delete 方法"""
+        app_logger.info(f"[A2A Handler] 收到 pushNotificationConfig/delete 请求")
+        # 当前不支持，返回 False
+        return False
+
+    async def on_list_task_push_notification_config(
+        self,
+        context: Optional[ServerCallContext] = None,
+    ) -> list[TaskPushNotificationConfig]:
+        """处理 tasks/pushNotificationConfig/list 方法"""
+        app_logger.info(f"[A2A Handler] 收到 pushNotificationConfig/list 请求")
+        # 当前不支持，返回空列表
+        return []
+
+    async def on_resubscribe_to_task(
+        self,
+        params: TaskIdParams,
+        context: Optional[ServerCallContext] = None,
+    ) -> AsyncGenerator[Event, None]:
+        """处理 tasks/resubscribe 方法"""
+        app_logger.info(f"[A2A Handler] 收到 tasks/resubscribe 请求")
+        # 当前不支持，返回空生成器
+        return
+        yield  # 使其成为生成器
+
+
+# 创建全局请求处理器实例
+_request_handler = A2ARequestHandler()
+
+
+def get_a2a_request_handler() -> A2ARequestHandler:
+    """获取 A2A 请求处理器实例"""
+    return _request_handler
 

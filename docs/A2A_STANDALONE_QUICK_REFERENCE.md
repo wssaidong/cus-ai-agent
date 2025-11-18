@@ -308,19 +308,3 @@ A2A 相关日志会输出到应用日志中，包括：
   }
 }
 ```
-
-## 相关文档
-
-- [A2A Nacos 移除总结](./A2A_NACOS_REMOVAL_SUMMARY.md)
-- [A2A AgentCard 使用指南](./a2a_agent_card.md)
-- [A2A 自动注册文档](./A2A_AUTO_REGISTER.md)
-- [A2A 快速开始](./A2A_AUTO_REGISTER_QUICK_START.md)
-
-## 更新日志
-
-### 2025-10-21
-- ✅ 移除 Nacos 服务注册功能
-- ✅ A2A 功能独立，使用独立配置
-- ✅ 添加 Token 认证支持
-- ✅ 完善错误处理和日志
-

@@ -11,9 +11,13 @@ from .routes import router
 from .knowledge_routes import router as knowledge_router
 from .recommendation_routes import router as recommendation_router
 from .a2a_routes import router as a2a_router
-from .a2a_rpc_routes import router as a2a_rpc_router
 from .openai_routes import router as openai_router
 # from .multi_agent_routes import router as multi_agent_router  # 旧架构，已废弃
+
+# 导入 a2a-sdk 的 FastAPI 应用
+from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.types import AgentCard, AgentCapabilities, AgentSkill
+from .a2a_rpc_routes import get_a2a_request_handler
 
 
 # 创建FastAPI应用
@@ -35,10 +39,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册路由
-# A2A JSON-RPC 接口（/api/v1/a2a）
-app.include_router(a2a_rpc_router)
-app_logger.info("A2A JSON-RPC API 已注册到 /api/v1/a2a")
+# 创建 AgentCard
+agent_card = AgentCard(
+    name="cus-ai-agent",
+    description="基于 LangGraph 的智能体服务，支持 RAG 知识库和多智能体协作",
+    url=f"http://{settings.api_host}:{settings.api_port}/api/v1/a2a",
+    version="1.0.0",
+    capabilities=AgentCapabilities(
+        streaming=True,
+        pushNotifications=False,
+        stateTransitionHistory=True,
+    ),
+    defaultInputModes=["text"],
+    defaultOutputModes=["text"],
+    skills=[
+        AgentSkill(
+            id="chat",
+            name="智能对话",
+            description="支持多轮对话、知识库检索和工具调用",
+            tags=["chat", "rag", "tools"],
+        ),
+        AgentSkill(
+            id="knowledge-search",
+            name="知识库检索",
+            description="从向量数据库检索相关知识",
+            tags=["rag", "search"],
+        ),
+    ],
+)
+
+# 创建 A2A JSON-RPC 应用（使用 a2a-sdk 官方实现）
+a2a_jsonrpc_app = A2AFastAPIApplication(
+    agent_card=agent_card,
+    http_handler=get_a2a_request_handler(),
+)
+
+# 将 A2A JSON-RPC 路由添加到主应用
+a2a_jsonrpc_app.add_routes_to_app(app, rpc_url="/api/v1/a2a")
+app_logger.info("A2A JSON-RPC API 已注册到 /api/v1/a2a (使用 a2a-sdk)")
 
 # OpenAI 兼容 API（/v1 前缀）
 app.include_router(openai_router)
@@ -111,6 +149,10 @@ async def root():
         "version": settings.api_version,
         "docs": "/docs",
         "health": "/api/v1/health",
+        "a2a_api": {
+            "a2a_rpc": "/api/v1/a2a",
+            "description": "A2A 协议端点 (SDK 和自定义实现)"
+        },
         "openai_api": {
             "chat_completions": "/v1/chat/completions",
             "models": "/v1/models",
